@@ -1,0 +1,59 @@
+import type { WorkoutBlueprint, WorkoutSession, WeightUnit } from '../types';
+
+function parseTargetReps(target: string): number | null {
+  const m = target.match(/\d+/);
+  return m ? parseInt(m[0]) : null;
+}
+
+export function buildBlankSession(
+  date: string,
+  blueprint: WorkoutBlueprint,
+  unit: WeightUnit = 'kg',
+  getLastWeight?: (exerciseId: string) => { weight: number; unit: WeightUnit } | null
+): WorkoutSession {
+  return {
+    id: crypto.randomUUID(),
+    date,
+    workoutType: blueprint.id,
+    startedAt: new Date().toISOString(),
+    exercises: blueprint.exercises.map((pe) => {
+      const lastWeight = getLastWeight ? getLastWeight(pe.exerciseId) : null;
+      let prefillWeight: number | null = null;
+      if (lastWeight) {
+        prefillWeight = lastWeight.unit === unit
+          ? lastWeight.weight
+          : unit === 'kg'
+            ? +(lastWeight.weight / 2.20462).toFixed(2)
+            : +(lastWeight.weight * 2.20462).toFixed(1);
+      }
+      return {
+        exerciseId: pe.exerciseId,
+        order: pe.order,
+        notes: '',
+        sets: pe.sets.map((ps) => ({
+          setNumber: ps.setNumber,
+          actualReps: parseTargetReps(ps.targetReps),
+          actualWeight: prefillWeight,
+          unit,
+          completed: false,
+          skipped: false,
+        })),
+      };
+    }),
+  };
+}
+
+export function countTotalSets(session: WorkoutSession): number {
+  return session.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+}
+
+export function countCompletedSets(session: WorkoutSession): number {
+  return session.exercises.reduce(
+    (sum, ex) => sum + ex.sets.filter((s) => s.completed).length,
+    0
+  );
+}
+
+export function isSessionComplete(session: WorkoutSession): boolean {
+  return !!session.completedAt;
+}

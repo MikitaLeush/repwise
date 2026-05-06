@@ -1,0 +1,63 @@
+# ── Dependencies ───────────────────────────────────────────────────────────────
+node_modules/
+
+# ── Expo ───────────────────────────────────────────────────────────────────────
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# ── Native build output ────────────────────────────────────────────────────────
+/ios/
+/android/
+.kotlin/
+*.orig.*
+
+# ── Code signing / certificates (NEVER commit these) ──────────────────────────
+*.jks
+*.p8
+*.p12
+*.key
+*.keystore
+*.mobileprovision
+*.pem
+google-services.json
+GoogleService-Info.plist
+
+# ── Environment & secrets (NEVER commit these) ────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+*.secret
+secrets.*
+api-keys.*
+
+# ── Metro bundler ──────────────────────────────────────────────────────────────
+.metro-health-check*
+
+# ── Debug logs ─────────────────────────────────────────────────────────────────
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# ── OS generated ───────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
+
+# ── IDE ────────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ── TypeScript ─────────────────────────────────────────────────────────────────
+*.tsbuildinfo
