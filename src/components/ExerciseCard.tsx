@@ -63,12 +63,14 @@ export function ExerciseCard({ exercise, onPress, onLongPress, isFavorite }: Exe
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    backgroundColor: '#1A1A1A',
-    borderRadius: 12,
+    backgroundColor: '#11181A',
+    borderRadius: 14,
     marginHorizontal: 16,
     marginVertical: 5,
     overflow: 'hidden',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#1f2825',
   },
   gifWrap: {
     width: 90,
@@ -79,7 +81,7 @@ const styles = StyleSheet.create({
   gif: {
     width: 90,
     height: 90,
-    backgroundColor: '#222222',
+    backgroundColor: '#0B0F0E',
   },
   favStar: {
     position: 'absolute',
@@ -108,23 +110,23 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   muscleTag: {
-    backgroundColor: '#C8FF0020',
-    borderColor: '#C8FF0040',
+    backgroundColor: '#5BD1A022',
+    borderColor: '#5BD1A044',
     borderWidth: 1,
     borderRadius: 5,
     paddingHorizontal: 7,
     paddingVertical: 2,
   },
   muscleTagText: {
-    color: '#C8FF00',
+    color: '#5BD1A0',
     fontSize: 10,
     fontWeight: '600',
   },
   equipTag: {
-    backgroundColor: '#333333',
-    borderColor: '#444444',
+    backgroundColor: '#1f2825',
+    borderColor: '#2A3A35',
   },
   equipTagText: {
-    color: '#888888',
+    color: '#7E8A86',
   },
 });

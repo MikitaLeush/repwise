@@ -58,6 +58,7 @@ Desktop.ini
 *.ntvs*
 *.njsproj
 *.sln
+uploads/
 
 # ── TypeScript ─────────────────────────────────────────────────────────────────
 *.tsbuildinfo

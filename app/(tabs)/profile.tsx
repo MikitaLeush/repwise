@@ -11,6 +11,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useApp } from '../../src/context/AppContext';
 import { TIME_MULTIPLIERS } from '../../src/hooks/useDevSettings';
 import { PageHeader } from '../../src/components/PageHeader';
+import { MONO, MONO_BOLD } from '../../src/utils/fonts';
+
+const ACCENT = '#5BD1A0';
+const ACCENT_DEEP = '#13352A';
+const BG = '#0B0F0E';
+const CARD = '#11181A';
+const BORDER = '#1f2825';
 
 // ─── Training reference data ──────────────────────────────────────────────────
 
@@ -63,8 +70,21 @@ export default function ProfileTab() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <PageHeader title="Profile" />
+      <PageHeader title="Profile" sub="Settings & preferences" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+
+        {/* ── User card ── */}
+        <View style={styles.userCard}>
+          <View style={styles.avatar}>
+            <Text style={[styles.avatarText, { fontFamily: MONO_BOLD }]}>RW</Text>
+          </View>
+          <View style={styles.userInfo}>
+            <Text style={styles.userName}>Repwise User</Text>
+            <Text style={[styles.userSub, { fontFamily: MONO }]}>
+              {unit.unit.toUpperCase()} · PPL Program
+            </Text>
+          </View>
+        </View>
 
         {/* ── Unit preference ── */}
         <SectionHeader title="Units" />
@@ -76,13 +96,13 @@ export default function ProfileTab() {
                 style={[styles.toggleBtn, unit.unit === 'kg' && styles.toggleBtnActive]}
                 onPress={() => unit.unit !== 'kg' && unit.toggleUnit()}
               >
-                <Text style={[styles.toggleText, unit.unit === 'kg' && styles.toggleTextActive]}>kg</Text>
+                <Text style={[styles.toggleText, { fontFamily: MONO_BOLD }, unit.unit === 'kg' && styles.toggleTextActive]}>kg</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.toggleBtn, unit.unit === 'lb' && styles.toggleBtnActive]}
                 onPress={() => unit.unit !== 'lb' && unit.toggleUnit()}
               >
-                <Text style={[styles.toggleText, unit.unit === 'lb' && styles.toggleTextActive]}>lb</Text>
+                <Text style={[styles.toggleText, { fontFamily: MONO_BOLD }, unit.unit === 'lb' && styles.toggleTextActive]}>lb</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -92,17 +112,14 @@ export default function ProfileTab() {
         <SectionHeader title="RPE / RIR Guide" sub="Reps in reserve scale for effort" />
         <View style={styles.card}>
           <View style={styles.tableHeader}>
-            <Text style={[styles.tableHead, styles.colRPE]}>RPE</Text>
-            <Text style={[styles.tableHead, styles.colRIR]}>RIR</Text>
-            <Text style={[styles.tableHead, styles.colFeel]}>Feel</Text>
+            <Text style={[styles.tableHead, styles.colRPE, { fontFamily: MONO_BOLD }]}>RPE</Text>
+            <Text style={[styles.tableHead, styles.colRIR, { fontFamily: MONO_BOLD }]}>RIR</Text>
+            <Text style={[styles.tableHead, styles.colFeel, { fontFamily: MONO_BOLD }]}>FEEL</Text>
           </View>
           {RPE_ROWS.map((r, i) => (
-            <View
-              key={r.rpe}
-              style={[styles.tableRow, i < RPE_ROWS.length - 1 && styles.tableRowBorder]}
-            >
-              <Text style={[styles.tableCell, styles.cellAccent, styles.colRPE]}>{r.rpe}</Text>
-              <Text style={[styles.tableCell, styles.colRIR]}>{r.rir}</Text>
+            <View key={r.rpe} style={[styles.tableRow, i < RPE_ROWS.length - 1 && styles.tableRowBorder]}>
+              <Text style={[styles.tableCell, styles.cellAccent, styles.colRPE, { fontFamily: MONO_BOLD }]}>{r.rpe}</Text>
+              <Text style={[styles.tableCell, styles.colRIR, { fontFamily: MONO }]}>{r.rir}</Text>
               <Text style={[styles.tableCell, styles.colFeel]}>{r.feel}</Text>
             </View>
           ))}
@@ -115,20 +132,17 @@ export default function ProfileTab() {
         <SectionHeader title="Volume Landmarks" sub="Sets per week for each muscle" />
         <View style={styles.card}>
           <View style={styles.tableHeader}>
-            <Text style={[styles.tableHead, styles.colMuscle]}>Muscle</Text>
-            <Text style={[styles.tableHead, styles.colVol]}>MEV</Text>
-            <Text style={[styles.tableHead, styles.colVol]}>MAV</Text>
-            <Text style={[styles.tableHead, styles.colVol]}>MRV</Text>
+            <Text style={[styles.tableHead, styles.colMuscle, { fontFamily: MONO_BOLD }]}>MUSCLE</Text>
+            <Text style={[styles.tableHead, styles.colVol, { fontFamily: MONO_BOLD }]}>MEV</Text>
+            <Text style={[styles.tableHead, styles.colVol, { fontFamily: MONO_BOLD }]}>MAV</Text>
+            <Text style={[styles.tableHead, styles.colVol, { fontFamily: MONO_BOLD }]}>MRV</Text>
           </View>
           {VOLUME_ROWS.map((r, i) => (
-            <View
-              key={r.muscle}
-              style={[styles.tableRow, i < VOLUME_ROWS.length - 1 && styles.tableRowBorder]}
-            >
+            <View key={r.muscle} style={[styles.tableRow, i < VOLUME_ROWS.length - 1 && styles.tableRowBorder]}>
               <Text style={[styles.tableCell, styles.colMuscle]}>{r.muscle}</Text>
-              <Text style={[styles.tableCell, styles.colVol]}>{r.mev}</Text>
-              <Text style={[styles.tableCell, styles.colVol, styles.cellAccent]}>{r.mav}</Text>
-              <Text style={[styles.tableCell, styles.colVol]}>{r.mrv}</Text>
+              <Text style={[styles.tableCell, styles.colVol, { fontFamily: MONO }]}>{r.mev}</Text>
+              <Text style={[styles.tableCell, styles.colVol, styles.cellAccent, { fontFamily: MONO_BOLD }]}>{r.mav}</Text>
+              <Text style={[styles.tableCell, styles.colVol, { fontFamily: MONO }]}>{r.mrv}</Text>
             </View>
           ))}
           <Text style={styles.refNote}>
@@ -150,7 +164,7 @@ export default function ProfileTab() {
                 style={[styles.speedBtn, devSettings.timeMultiplier === m && styles.speedBtnActive]}
                 onPress={() => devSettings.setTimeMultiplier(m)}
               >
-                <Text style={[styles.speedText, devSettings.timeMultiplier === m && styles.speedTextActive]}>
+                <Text style={[styles.speedText, { fontFamily: MONO_BOLD }, devSettings.timeMultiplier === m && styles.speedTextActive]}>
                   {m}×
                 </Text>
               </TouchableOpacity>
@@ -177,85 +191,76 @@ function SectionHeader({ title, sub }: { title: string; sub?: string }) {
   return (
     <View style={styles.sectionHead}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      {sub ? <Text style={styles.sectionSub}>{sub}</Text> : null}
+      {sub ? <Text style={[styles.sectionSub, { fontFamily: MONO }]}>{sub}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0F0F0F' },
+  safe: { flex: 1, backgroundColor: BG },
   scroll: { paddingHorizontal: 16, paddingBottom: 40 },
 
-  pageTitle: { color: '#FFFFFF', fontSize: 26, fontWeight: '700', paddingTop: 12, paddingBottom: 4 },
+  // User card
+  userCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: CARD, borderRadius: 18, padding: 18, marginTop: 8,
+    borderWidth: 1, borderColor: BORDER,
+  },
+  avatar: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: ACCENT_DEEP, borderWidth: 2, borderColor: ACCENT + '55',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarText: { color: ACCENT, fontSize: 18, fontWeight: '800' },
+  userInfo: { flex: 1 },
+  userName: { color: '#E6F1ED', fontSize: 17, fontWeight: '700' },
+  userSub: { color: '#7E8A86', fontSize: 12, marginTop: 3 },
 
   sectionHead: { marginTop: 22, marginBottom: 10 },
-  sectionTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
-  sectionSub: { color: '#555555', fontSize: 12, marginTop: 2 },
+  sectionTitle: { color: '#E6F1ED', fontSize: 16, fontWeight: '700' },
+  sectionSub: { color: '#5A6663', fontSize: 11, marginTop: 2 },
 
   card: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#2C2C2C',
+    backgroundColor: CARD, borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: BORDER,
   },
 
   // Unit toggle
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  rowLabel: { color: '#CCCCCC', fontSize: 15 },
-  toggle: {
-    flexDirection: 'row',
-    backgroundColor: '#252525',
-    borderRadius: 8,
-    padding: 3,
-    gap: 3,
-  },
-  toggleBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 6 },
-  toggleBtnActive: { backgroundColor: '#C8FF00' },
-  toggleText: { color: '#666666', fontSize: 14, fontWeight: '600' },
-  toggleTextActive: { color: '#0F0F0F' },
+  rowLabel: { color: '#9CB0AA', fontSize: 15 },
+  toggle: { flexDirection: 'row', backgroundColor: BG, borderRadius: 10, padding: 3, gap: 3 },
+  toggleBtn: { paddingHorizontal: 18, paddingVertical: 7, borderRadius: 8 },
+  toggleBtnActive: { backgroundColor: ACCENT },
+  toggleText: { color: '#5A6663', fontSize: 14, fontWeight: '600' },
+  toggleTextActive: { color: '#0B1A14' },
 
   // Tables
-  tableHeader: { flexDirection: 'row', marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#2A2A2A' },
-  tableHead: { color: '#555555', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-
+  tableHeader: { flexDirection: 'row', marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: BORDER },
+  tableHead: { color: '#5A6663', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   tableRow: { flexDirection: 'row', paddingVertical: 9 },
-  tableRowBorder: { borderBottomWidth: 1, borderBottomColor: '#222222' },
-  tableCell: { color: '#AAAAAA', fontSize: 13 },
-  cellAccent: { color: '#C8FF00', fontWeight: '600' },
-
+  tableRowBorder: { borderBottomWidth: 1, borderBottomColor: BORDER },
+  tableCell: { color: '#7E8A86', fontSize: 13 },
+  cellAccent: { color: ACCENT, fontWeight: '600' },
   colRPE: { width: 44 },
   colRIR: { width: 44 },
   colFeel: { flex: 1 },
   colMuscle: { flex: 1 },
   colVol: { width: 54, textAlign: 'center' },
-
-  refNote: { color: '#444444', fontSize: 11, marginTop: 12, lineHeight: 16 },
+  refNote: { color: '#3A4541', fontSize: 11, marginTop: 12, lineHeight: 16 },
 
   // Developer
-  devNote: { color: '#555555', fontSize: 12, marginTop: 4, marginBottom: 14, lineHeight: 17 },
+  devNote: { color: '#5A6663', fontSize: 12, marginTop: 4, marginBottom: 14, lineHeight: 17 },
   speedRow: { flexDirection: 'row', gap: 8 },
   speedBtn: {
-    flex: 1,
-    backgroundColor: '#252525',
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#333333',
+    flex: 1, backgroundColor: BG, borderRadius: 8, paddingVertical: 10,
+    alignItems: 'center', borderWidth: 1, borderColor: BORDER,
   },
-  speedBtnActive: { backgroundColor: '#C8FF0020', borderColor: '#C8FF00' },
-  speedText: { color: '#666666', fontSize: 14, fontWeight: '600' },
-  speedTextActive: { color: '#C8FF00' },
+  speedBtnActive: { backgroundColor: ACCENT + '20', borderColor: ACCENT },
+  speedText: { color: '#5A6663', fontSize: 14, fontWeight: '600' },
+  speedTextActive: { color: ACCENT },
 
   // Danger zone
-  wipeBtn: {
-    borderWidth: 1,
-    borderColor: '#5A1A1A',
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
+  wipeBtn: { borderWidth: 1, borderColor: '#5A1A1A', borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   wipeBtnText: { color: '#CC3333', fontSize: 15, fontWeight: '600' },
-  wipeNote: { color: '#444444', fontSize: 12, textAlign: 'center', marginTop: 8 },
+  wipeNote: { color: '#3A4541', fontSize: 12, textAlign: 'center', marginTop: 8 },
 });

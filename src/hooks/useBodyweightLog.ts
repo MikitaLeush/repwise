@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useAsyncStorage } from './useAsyncStorage';
+import { generateId } from '../utils/sessionUtils';
 import type { BodyweightLog } from '../types';
 
 export function useBodyweightLog() {
@@ -7,7 +8,7 @@ export function useBodyweightLog() {
 
   const addLog = useCallback(
     (weightKg: number, date: string) => {
-      const entry: BodyweightLog = { id: crypto.randomUUID(), date, weightKg };
+      const entry: BodyweightLog = { id: generateId(), date, weightKg };
       setLogs((prev) => [entry, ...prev]);
     },
     [setLogs]

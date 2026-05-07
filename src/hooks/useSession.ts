@@ -41,6 +41,17 @@ export function useSession() {
     [setSessions]
   );
 
+  const uncompleteSession = useCallback(
+    (id: string) => {
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, completedAt: undefined } : s
+        )
+      );
+    },
+    [setSessions]
+  );
+
   const updateSet = useCallback(
     (
       sessionId: string,
@@ -183,6 +194,7 @@ export function useSession() {
     saveSession,
     deleteSession,
     completeSession,
+    uncompleteSession,
     updateSet,
     addSet,
     removeSet,

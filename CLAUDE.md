@@ -4,7 +4,7 @@ Guidance for Claude Code when working in this repository.
 
 ## Project
 
-**Repwise v0.1.0** — Expo (React Native) fitness tracking app. Targets iOS, Android, and Expo Web from one codebase.
+**Repwise v0.2.0** — Expo (React Native) fitness tracking app. Targets iOS, Android, and Expo Web from one codebase.
 
 Disk path: `d:\Work\claude\repwise\`
 A sibling Vite/Capacitor prototype lives at `d:\Work\claude\fitnessApp\` — separate project, kept for reference only.
@@ -45,7 +45,7 @@ npx tsc --noEmit     # Type-check — zero errors expected
 ```
 repwise/
 ├── app/
-│   ├── _layout.tsx              Root Stack + SafeAreaProvider + AppProvider
+│   ├── _layout.tsx              Root Stack + SafeAreaProvider + AppProvider + JetBrains Mono font load
 │   ├── (tabs)/
 │   │   ├── _layout.tsx          Tab bar (bg #111111, active #C8FF00)
 │   │   ├── workout.tsx          Workout tab — waterfall schedule
@@ -59,7 +59,8 @@ repwise/
 │   │   ├── BodyDiagram.tsx      SVG muscle diagram wrapper
 │   │   ├── ExerciseCard.tsx     Exercise list card (image + tags)
 │   │   ├── PageHeader.tsx       Shared Repwise logo + page title header
-│   │   └── RecoveryInfo.tsx     Recovery status display
+│   │   ├── RecoveryInfo.tsx     Recovery status display
+│   │   └── Ring.tsx             SVG donut/ring progress indicator
 │   ├── context/
 │   │   └── AppContext.tsx       Single useApp() provider composing all hooks
 │   ├── data/
@@ -88,7 +89,8 @@ repwise/
 │   │   └── index.ts             Single source of truth for all interfaces
 │   └── utils/
 │       ├── dateUtils.ts         ISO date helpers
-│       └── sessionUtils.ts      buildBlankSession, countSets, etc.
+│       ├── fonts.ts             MONO / MONO_BOLD font family constants
+│       └── sessionUtils.ts      buildBlankSession, countSets, generateId, etc.
 └── scripts/
     ├── dedup-exercisedb.mjs     Re-fetches wger.de data (run to refresh exercises)
     └── fetch-exercisedb.mjs     Fetches raw exercisedb OSS data
@@ -102,7 +104,7 @@ repwise/
 - **Waterfall schedule** — today at top, next 6 days below; past days dimmed
 - **Live clock** — current date + time in the header
 - **Tap day** → opens daily workout session screen
-- **Long-press day** → bottom sheet to reassign workout type (PPL or custom)
+- **Long-press day pill or day card** → bottom sheet to reassign workout type (PPL or custom)
 - **Custom workouts** — "Create New Workout" in the assign sheet; custom names appear alongside PPL options
 
 ### Tab 2: Exercises
@@ -240,7 +242,7 @@ Dark only.
 
 - **No new dependencies** without `npx expo install` (native) or `npm install` (pure JS)
 - **No `any` type** — TypeScript strict mode enforced
-- **All IDs** via `crypto.randomUUID()`
+- **All IDs** via `generateId()` from `src/utils/sessionUtils.ts` — `crypto.randomUUID()` is NOT available in Hermes/React Native
 - **All dates** as ISO strings (`"2026-05-04"`), never `Date` objects in storage
 - **Every screen** wrapped in `<SafeAreaView edges={['top']}>` from `react-native-safe-area-context`
 - **No secrets in code** — no API keys, no `.env` files committed. See `.gitignore`.

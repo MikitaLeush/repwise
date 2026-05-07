@@ -24,6 +24,8 @@ import {
 import { isoToDayOfWeek, formatDisplayDate } from '../../src/utils/dateUtils';
 import { getExercise, exercises as pplExercises } from '../../src/data/exercises';
 import { exerciseDB } from '../../src/data/exercisedb';
+import { Ring } from '../../src/components/Ring';
+import { MONO, MONO_BOLD } from '../../src/utils/fonts';
 import type { WorkoutSession, LoggedSet, WorkoutBlueprint, MuscleGroup } from '../../src/types';
 
 const MUSCLE_TO_SLUG: Partial<Record<MuscleGroup, string>> = {
@@ -31,6 +33,12 @@ const MUSCLE_TO_SLUG: Partial<Record<MuscleGroup, string>> = {
   biceps: 'biceps', quads: 'quadriceps', hamstrings: 'hamstrings',
   glutes: 'gluteal', calves: 'calves', core: 'abs',
 };
+
+const ACCENT = '#5BD1A0';
+const ACCENT_DEEP = '#13352A';
+const BG = '#0B0F0E';
+const CARD = '#11181A';
+const BORDER = '#1f2825';
 
 type InputState = { weight: string; reps: string };
 function inputKey(exerciseId: string, setNumber: number) { return `${exerciseId}:${setNumber}`; }
@@ -57,8 +65,7 @@ export default function DailyWorkoutScreen() {
 
   const [activeSession, setActiveSession] = useState<WorkoutSession | null>(null);
   const [inputs, setInputs] = useState<Record<string, InputState>>({});
-  // Which exercise is open in the detail modal
-  const [detailExId, setDetailExId] = useState<string | null>(null);
+  const [openExIds, setOpenExIds] = useState<Set<string>>(new Set());
   const [showPicker, setShowPicker] = useState(false);
   const [pickerQuery, setPickerQuery] = useState('');
   const initializedRef = useRef(false);
@@ -83,7 +90,6 @@ export default function DailyWorkoutScreen() {
     setInputs(initInputs);
   }, [plan?.id]);
 
-  // Exercise picker list
   const pickerExercises = useMemo(() => {
     const q = pickerQuery.toLowerCase().trim();
     const ppl = pplExercises.filter((e) => !q || e.name.toLowerCase().includes(q)).map((e) => ({ id: e.id, name: e.name }));
@@ -100,30 +106,34 @@ export default function DailyWorkoutScreen() {
     return exerciseId;
   }
 
-  // Returns the best summary weight×reps for the exercise (from last set with data)
-  function getExSummary(exerciseId: string): string {
+  function getNextSetHint(exerciseId: string): string | null {
     const ex = activeSession?.exercises.find((e) => e.exerciseId === exerciseId);
-    if (!ex) return '';
-    // Find the input with weight+reps or last logged set
-    for (let i = ex.sets.length - 1; i >= 0; i--) {
-      const key = inputKey(exerciseId, ex.sets[i].setNumber);
-      const inp = inputs[key];
-      if (inp?.weight && inp?.reps) return `${inp.weight} ${unit.unit} × ${inp.reps}`;
-      const s = ex.sets[i];
-      if (s.actualWeight !== null && s.actualReps !== null) return `${s.actualWeight} ${unit.unit} × ${s.actualReps}`;
-    }
-    const planned = plan?.exercises.find((pe) => pe.exerciseId === exerciseId);
-    if (planned?.sets[0]) return planned.sets[0].targetReps + ' reps';
-    return '';
+    if (!ex) return null;
+    const nextSet = ex.sets.find((s) => !s.completed);
+    if (!nextSet) return null;
+    const key = inputKey(exerciseId, nextSet.setNumber);
+    const inp = inputs[key];
+    if (inp?.weight && inp?.reps) return `NEXT: ${inp.weight} ${unit.unit} × ${inp.reps}`;
+    if (nextSet.actualWeight !== null && nextSet.actualReps !== null)
+      return `NEXT: ${nextSet.actualWeight} ${unit.unit} × ${nextSet.actualReps}`;
+    return null;
   }
 
-  // ── TAP: complete the next uncompleted set ─────────────────────────────────
+  function toggleExpand(id: string) {
+    setOpenExIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   function handleExTap(exerciseId: string) {
     if (!activeSession || !!activeSession.completedAt) return;
     const ex = activeSession.exercises.find((e) => e.exerciseId === exerciseId);
     if (!ex) return;
     const nextSet = ex.sets.find((s) => !s.completed);
-    if (!nextSet) return; // all done already
+    if (!nextSet) return;
     toggleSetComplete(exerciseId, nextSet.setNumber, false);
   }
 
@@ -216,7 +226,7 @@ export default function DailyWorkoutScreen() {
         onPress: () => {
           sessionHook.removeExerciseFromSession(activeSession.id, exerciseId);
           setActiveSession((prev) => prev ? { ...prev, exercises: prev.exercises.filter((e) => e.exerciseId !== exerciseId) } : prev);
-          if (detailExId === exerciseId) setDetailExId(null);
+          setOpenExIds((prev) => { const next = new Set(prev); next.delete(exerciseId); return next; });
         },
       },
     ]);
@@ -224,6 +234,10 @@ export default function DailyWorkoutScreen() {
 
   function handlePickExercise(exerciseId: string) {
     if (!activeSession) return;
+    if (activeSession.exercises.some((e) => e.exerciseId === exerciseId)) {
+      Alert.alert('Already Added', 'This exercise is already in this workout.');
+      return;
+    }
     const DEFAULT_SETS = 3;
     sessionHook.addExerciseToSession(activeSession.id, exerciseId, DEFAULT_SETS, unit.unit);
     const newExercise = {
@@ -258,13 +272,23 @@ export default function DailyWorkoutScreen() {
   const allDone = totalSets > 0 && doneSets === totalSets;
   const progressPct = totalSets > 0 ? (doneSets / totalSets) * 100 : 0;
 
-  // The exercise whose detail modal is open
-  const detailEx = activeSession?.exercises.find((e) => e.exerciseId === detailExId) ?? null;
+  const totalVolume = useMemo(() => {
+    if (!activeSession) return 0;
+    return activeSession.exercises.reduce((acc, ex) =>
+      acc + ex.sets.reduce((a, s) => {
+        if (!s.completed) return a;
+        const key = inputKey(ex.exerciseId, s.setNumber);
+        const inp = inputs[key];
+        const w = inp?.weight ? parseFloat(inp.weight) || 0 : s.actualWeight ?? 0;
+        const r = inp?.reps ? parseInt(inp.reps) || 0 : s.actualReps ?? 0;
+        return a + w * r;
+      }, 0), 0);
+  }, [activeSession, inputs]);
 
   if (isRest) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <Header title="Rest Day" date={date} onBack={() => router.back()} />
+        <WorkoutHeader title="Rest Day" date={date} onBack={() => router.back()} />
         <View style={styles.centeredContent}>
           <Text style={styles.restEmoji}>💤</Text>
           <Text style={styles.infoTitle}>Rest & Recover</Text>
@@ -277,7 +301,7 @@ export default function DailyWorkoutScreen() {
   if (!plan) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
-        <Header title="Workout" date={date} onBack={() => router.back()} />
+        <WorkoutHeader title="Workout" date={date} onBack={() => router.back()} />
         <View style={styles.centeredContent}>
           <Text style={styles.infoTitle}>No plan found</Text>
           <Text style={styles.infoSub}>Go back and reassign this day.</Text>
@@ -289,193 +313,261 @@ export default function DailyWorkoutScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <Header title={plan.label} date={date} onBack={() => router.back()} />
+        {/* ── Sticky header ── */}
+        <WorkoutHeader title={plan.label} date={date} onBack={() => router.back()} />
 
+        {/* ── Progress band ── */}
         {activeSession && (
-          <View style={styles.progressRow}>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
+          <View style={styles.progressBand}>
+            <Ring pct={progressPct} size={56} stroke={5} color={ACCENT} trackColor={BORDER}>
+              <View style={styles.ringInner}>
+                <Text style={[styles.ringDone, { fontFamily: MONO_BOLD }]}>{doneSets}</Text>
+                <Text style={[styles.ringTotal, { fontFamily: MONO }]}>/{totalSets}</Text>
+              </View>
+            </Ring>
+            <View style={styles.progressBandRight}>
+              <View style={styles.progressBandStats}>
+                <View>
+                  <Text style={[styles.bandStatLabel, { fontFamily: MONO }]}>VOLUME</Text>
+                  <Text style={[styles.bandStatValue, { fontFamily: MONO_BOLD }]}>
+                    {totalVolume > 0 ? (totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}k` : Math.round(totalVolume).toString()) : '—'}
+                    <Text style={[styles.bandStatUnit, { fontFamily: MONO }]}> {unit.unit}</Text>
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={[styles.bandStatLabel, { fontFamily: MONO }]}>SETS</Text>
+                  <Text style={[styles.bandStatValue, { fontFamily: MONO_BOLD }]}>
+                    {doneSets}/{totalSets}
+                  </Text>
+                </View>
+              </View>
+              {/* Progress bar */}
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${progressPct}%` as `${number}%` }]} />
+              </View>
             </View>
-            <Text style={styles.progressLabel}>{doneSets}/{totalSets} sets</Text>
           </View>
         )}
 
         {isCompleted && (
           <View style={styles.completedBanner}>
-            <Text style={styles.completedText}>✓ Workout Complete</Text>
+            <Text style={[styles.completedText, { fontFamily: MONO_BOLD }]}>✓ Workout Complete</Text>
           </View>
         )}
 
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {(activeSession?.exercises ?? []).map((ex) => {
             const name = getExerciseName(ex.exerciseId);
             const doneSetsEx = ex.sets.filter((s) => s.completed).length;
             const totalSetsEx = ex.sets.length;
             const allExDone = doneSetsEx === totalSetsEx && totalSetsEx > 0;
-            const summary = getExSummary(ex.exerciseId);
+            const isOpen = openExIds.has(ex.exerciseId);
+            const nextHint = getNextSetHint(ex.exerciseId);
+            const pctEx = totalSetsEx > 0 ? (doneSetsEx / totalSetsEx) * 100 : 0;
 
             return (
-              <Pressable
+              <View
                 key={ex.exerciseId}
                 style={[styles.exCard, allExDone && styles.exCardDone]}
-                onPress={() => handleExTap(ex.exerciseId)}
-                onLongPress={() => setDetailExId(ex.exerciseId)}
-                delayLongPress={350}
               >
-                <View style={styles.exLeft}>
-                  {/* Progress ring: circle with done/total */}
-                  <View style={styles.progressCircle}>
-                    <Text style={styles.progressCircleText}>{doneSetsEx}</Text>
-                    <Text style={styles.progressCircleDen}>/{totalSetsEx}</Text>
-                  </View>
-                </View>
+                {/* Card header row */}
+                <Pressable
+                  style={styles.exCardHeader}
+                  onPress={() => handleExTap(ex.exerciseId)}
+                  onLongPress={() => handleRemoveExercise(ex.exerciseId, name)}
+                  delayLongPress={600}
+                >
+                  <Ring pct={pctEx} size={44} stroke={4} color={allExDone ? ACCENT : ACCENT} trackColor={BORDER}>
+                    <Text style={[styles.ringExText, { fontFamily: MONO_BOLD, color: allExDone ? ACCENT : '#E6F1ED' }]}>
+                      {allExDone ? '✓' : `${doneSetsEx}/${totalSetsEx}`}
+                    </Text>
+                  </Ring>
 
-                <View style={styles.exMid}>
-                  <Text style={[styles.exName, allExDone && styles.exNameDone]} numberOfLines={2}>{name}</Text>
-                  {summary ? <Text style={styles.exSummary}>{summary}</Text> : null}
-                </View>
-
-                <View style={styles.exRight}>
-                  {allExDone
-                    ? <Text style={styles.exDoneCheck}>✓</Text>
-                    : <Text style={styles.tapHint}>Tap</Text>
-                  }
-                </View>
-              </Pressable>
-            );
-          })}
-
-          {!isCompleted && activeSession && (
-            <TouchableOpacity style={styles.addExerciseBtn} onPress={() => setShowPicker(true)}>
-              <Text style={styles.addExerciseText}>+ Add Exercise</Text>
-            </TouchableOpacity>
-          )}
-
-          <View style={{ height: 120 }} />
-        </ScrollView>
-
-        {!isCompleted && activeSession && (
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={[styles.finishBtn, !allDone && styles.finishBtnPartial]}
-              onPress={handleFinish}
-            >
-              <Text style={styles.finishBtnText}>
-                {allDone ? 'Finish Workout' : `Finish Early  (${doneSets}/${totalSets})`}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </KeyboardAvoidingView>
-
-      {/* ── Detail modal (long press): all sets with inputs ── */}
-      <Modal visible={detailExId !== null} animationType="slide" transparent onRequestClose={() => setDetailExId(null)}>
-        <Pressable style={styles.detailBackdrop} onPress={() => setDetailExId(null)}>
-          <Pressable style={styles.detailSheet} onPress={() => {}}>
-            <View style={styles.detailHandle} />
-            {detailEx && (() => {
-              const name = getExerciseName(detailEx.exerciseId);
-              const def = getExercise(detailEx.exerciseId);
-              return (
-                <>
-                  <View style={styles.detailTitleRow}>
-                    <Text style={styles.detailTitle} numberOfLines={2}>{name}</Text>
-                    <TouchableOpacity onPress={() => handleRemoveExercise(detailEx.exerciseId, name)} hitSlop={8}>
-                      <Text style={styles.detailRemove}>Remove</Text>
-                    </TouchableOpacity>
+                  <View style={styles.exMid}>
+                    <Text style={[styles.exName, allExDone && styles.exNameDone]} numberOfLines={2}>{name}</Text>
+                    {nextHint && !allExDone ? (
+                      <Text style={[styles.exHint, { fontFamily: MONO }]}>{nextHint}</Text>
+                    ) : null}
                   </View>
 
-                  {/* Set header */}
-                  <View style={styles.setHeaderRow}>
-                    <Text style={[styles.setHeaderCell, { width: 28 }]}>Set</Text>
-                    <Text style={[styles.setHeaderCell, { flex: 1 }]}>{unit.unit}</Text>
-                    <Text style={[styles.setHeaderCell, { flex: 1 }]}>Reps</Text>
-                    <View style={{ width: 36 }} />
-                    {!isCompleted && <View style={{ width: 24 }} />}
-                  </View>
+                  <TouchableOpacity
+                    style={styles.expandBtn}
+                    onPress={(e) => { e.stopPropagation?.(); toggleExpand(ex.exerciseId); }}
+                    hitSlop={8}
+                  >
+                    <Text style={[styles.expandChevron, isOpen && styles.expandChevronOpen]}>›</Text>
+                  </TouchableOpacity>
+                </Pressable>
 
-                  <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false}>
-                    {detailEx.sets.map((s) => {
-                      const key = inputKey(detailEx.exerciseId, s.setNumber);
+                {/* Inline set table */}
+                {isOpen && (
+                  <View style={styles.setTable}>
+                    {/* Remove exercise row */}
+                    {!isCompleted && (
+                      <TouchableOpacity
+                        style={styles.removeExRow}
+                        onPress={() => handleRemoveExercise(ex.exerciseId, name)}
+                      >
+                        <Text style={[styles.removeExText, { fontFamily: MONO }]}>✕ Remove exercise</Text>
+                      </TouchableOpacity>
+                    )}
+                    {/* Column headers */}
+                    <View style={styles.setHeaderRow}>
+                      <Text style={[styles.setHeaderCell, { width: 28, fontFamily: MONO }]}>SET</Text>
+                      <Text style={[styles.setHeaderCell, { flex: 1, textAlign: 'center', fontFamily: MONO }]}>{unit.unit.toUpperCase()}</Text>
+                      <Text style={[styles.setHeaderCell, { flex: 1, textAlign: 'center', fontFamily: MONO }]}>REPS</Text>
+                      <View style={{ width: 36 }} />
+                      {!isCompleted && <View style={{ width: 24 }} />}
+                    </View>
+
+                    {ex.sets.map((s) => {
+                      const key = inputKey(ex.exerciseId, s.setNumber);
                       const inp = inputs[key] ?? { weight: '', reps: '' };
                       return (
                         <View key={s.setNumber} style={[styles.setRow, s.completed && styles.setRowDone]}>
-                          <Text style={[styles.setNumText, { width: 28 }]}>{s.setNumber}</Text>
+                          <Text style={[styles.setNum, { fontFamily: MONO }]}>{s.setNumber}</Text>
 
                           <TextInput
                             style={[styles.setInput, { flex: 1 }, isCompleted && styles.inputDisabled]}
                             value={inp.weight}
-                            onChangeText={(v) => handleWeightChange(detailEx.exerciseId, s.setNumber, v)}
-                            onBlur={() => flushInput(detailEx.exerciseId, s.setNumber)}
-                            keyboardType="decimal-pad" placeholder="—" placeholderTextColor="#444444"
+                            onChangeText={(v) => handleWeightChange(ex.exerciseId, s.setNumber, v)}
+                            onBlur={() => flushInput(ex.exerciseId, s.setNumber)}
+                            keyboardType="decimal-pad"
+                            placeholder="—"
+                            placeholderTextColor="#3A4541"
                             editable={!isCompleted}
                           />
 
                           <TextInput
                             style={[styles.setInput, { flex: 1 }, isCompleted && styles.inputDisabled]}
                             value={inp.reps}
-                            onChangeText={(v) => handleRepsChange(detailEx.exerciseId, s.setNumber, v)}
-                            onBlur={() => flushInput(detailEx.exerciseId, s.setNumber)}
-                            keyboardType="number-pad" placeholder="—" placeholderTextColor="#444444"
+                            onChangeText={(v) => handleRepsChange(ex.exerciseId, s.setNumber, v)}
+                            onBlur={() => flushInput(ex.exerciseId, s.setNumber)}
+                            keyboardType="number-pad"
+                            placeholder="—"
+                            placeholderTextColor="#3A4541"
                             editable={!isCompleted}
                           />
 
                           <TouchableOpacity
-                            style={[styles.checkBtn, { width: 36, marginLeft: 8 }, s.completed && styles.checkBtnDone]}
-                            onPress={() => toggleSetComplete(detailEx.exerciseId, s.setNumber, s.completed)}
+                            style={[styles.checkBtn, s.completed && styles.checkBtnDone]}
+                            onPress={() => toggleSetComplete(ex.exerciseId, s.setNumber, s.completed)}
                             disabled={isCompleted}
                           >
-                            <Text style={[styles.checkBtnText, s.completed && { color: '#C8FF00' }]}>
-                              {s.completed ? '✓' : '○'}
+                            <Text style={[styles.checkBtnText, s.completed && styles.checkBtnTextDone, { fontFamily: MONO_BOLD }]}>
+                              {s.completed ? '✓' : ''}
                             </Text>
                           </TouchableOpacity>
 
                           {!isCompleted && (
                             <TouchableOpacity
-                              style={{ width: 24, alignItems: 'center' }}
-                              onPress={() => handleRemoveSet(detailEx.exerciseId, s.setNumber)}
+                              style={styles.removeSetBtn}
+                              onPress={() => handleRemoveSet(ex.exerciseId, s.setNumber)}
                               hitSlop={8}
                             >
-                              <Text style={{ color: '#555555', fontSize: 18, fontWeight: '300' }}>−</Text>
+                              <Text style={[styles.removeSetText, { fontFamily: MONO }]}>−</Text>
                             </TouchableOpacity>
                           )}
                         </View>
                       );
                     })}
-                  </ScrollView>
 
-                  {!isCompleted && (
-                    <TouchableOpacity style={styles.addSetBtn} onPress={() => handleAddSet(detailEx.exerciseId)}>
-                      <Text style={styles.addSetText}>+ Add Set</Text>
-                    </TouchableOpacity>
-                  )}
+                    {!isCompleted && (
+                      <TouchableOpacity style={styles.addSetBtn} onPress={() => handleAddSet(ex.exerciseId)}>
+                        <Text style={[styles.addSetText, { fontFamily: MONO }]}>+ Add Set</Text>
+                      </TouchableOpacity>
+                    )}
 
-                  {def?.notes ? <Text style={styles.exerciseNote}>{def.notes}</Text> : null}
-                </>
-              );
-            })()}
-          </Pressable>
-        </Pressable>
-      </Modal>
+                    {(() => {
+                      const def = getExercise(ex.exerciseId);
+                      return def?.notes ? (
+                        <Text style={styles.exerciseNote}>{def.notes}</Text>
+                      ) : null;
+                    })()}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+
+          {!isCompleted && activeSession && (
+            <TouchableOpacity style={styles.addExerciseBtn} onPress={() => setShowPicker(true)}>
+              <Text style={[styles.addExerciseText, { fontFamily: MONO }]}>+ Add Exercise</Text>
+            </TouchableOpacity>
+          )}
+
+          <View style={{ height: 120 }} />
+        </ScrollView>
+
+        {isCompleted && activeSession && (
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.reopenBtn}
+              onPress={() => {
+                sessionHook.uncompleteSession(activeSession.id);
+                setActiveSession((prev) => prev ? { ...prev, completedAt: undefined } : prev);
+              }}
+            >
+              <Text style={[styles.reopenBtnText, { fontFamily: MONO_BOLD }]}>
+                ↩ Reopen Workout
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {!isCompleted && activeSession && (
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={[
+                styles.finishBtn,
+                allDone && styles.finishBtnAllDone,
+                !allDone && doneSets > 0 && styles.finishBtnPartial,
+                doneSets === 0 && styles.finishBtnDisabled,
+              ]}
+              onPress={handleFinish}
+              disabled={doneSets === 0}
+            >
+              <Text style={[
+                styles.finishBtnText,
+                { fontFamily: MONO_BOLD },
+                allDone && styles.finishBtnTextDark,
+                doneSets === 0 && styles.finishBtnTextDim,
+              ]}>
+                {allDone ? 'Finish Workout ✓' : `Finish Early · ${doneSets}/${totalSets}`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </KeyboardAvoidingView>
 
       {/* ── Exercise picker modal ── */}
       <Modal visible={showPicker} animationType="slide" onRequestClose={() => setShowPicker(false)}>
         <SafeAreaView style={styles.pickerSafe} edges={['top']}>
           <View style={styles.pickerHeader}>
-            <Text style={styles.pickerTitle}>Add Exercise</Text>
+            <Text style={[styles.pickerTitle, { fontFamily: MONO_BOLD }]}>Add Exercise</Text>
             <TouchableOpacity onPress={() => { setShowPicker(false); setPickerQuery(''); }}>
-              <Text style={styles.pickerClose}>✕</Text>
+              <Text style={[styles.pickerClose, { fontFamily: MONO }]}>✕</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.pickerSearchRow}>
             <TextInput
-              style={styles.pickerSearch} value={pickerQuery} onChangeText={setPickerQuery}
-              placeholder="Search exercises…" placeholderTextColor="#555555"
-              autoCorrect={false} autoCapitalize="none" autoFocus
+              style={styles.pickerSearch}
+              value={pickerQuery}
+              onChangeText={setPickerQuery}
+              placeholder="Search exercises…"
+              placeholderTextColor="#5A6663"
+              autoCorrect={false}
+              autoCapitalize="none"
+              autoFocus
             />
           </View>
           <FlatList
-            data={pickerExercises} keyExtractor={(item) => item.id}
+            data={pickerExercises}
+            keyExtractor={(item) => item.id}
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <TouchableOpacity style={styles.pickerItem} onPress={() => handlePickExercise(item.id)}>
@@ -490,15 +582,15 @@ export default function DailyWorkoutScreen() {
   );
 }
 
-function Header({ title, date, onBack }: { title: string; date: string; onBack: () => void }) {
+function WorkoutHeader({ title, date, onBack }: { title: string; date: string; onBack: () => void }) {
   return (
     <View style={styles.header}>
       <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={12}>
-        <Text style={styles.backArrow}>←</Text>
+        <Text style={[styles.backArrow, { fontFamily: MONO_BOLD }]}>‹</Text>
       </TouchableOpacity>
       <View style={styles.headerCenter}>
         <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
-        <Text style={styles.headerDate}>{formatDisplayDate(date)}</Text>
+        <Text style={[styles.headerDate, { fontFamily: MONO }]}>{formatDisplayDate(date)}</Text>
       </View>
       <View style={styles.backBtn} />
     </View>
@@ -506,116 +598,140 @@ function Header({ title, date, onBack }: { title: string; date: string; onBack: 
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0F0F0F' },
+  safe: { flex: 1, backgroundColor: BG },
 
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, gap: 8 },
   backBtn: { width: 40, alignItems: 'center' },
-  backArrow: { color: '#C8FF00', fontSize: 24, fontWeight: '300' },
+  backArrow: { color: ACCENT, fontSize: 28, fontWeight: '300', lineHeight: 32 },
   headerCenter: { flex: 1, alignItems: 'center' },
-  headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
-  headerDate: { color: '#666666', fontSize: 12, marginTop: 1 },
+  headerTitle: { color: '#E6F1ED', fontSize: 18, fontWeight: '700' },
+  headerDate: { color: '#5A6663', fontSize: 12, marginTop: 1 },
 
-  progressRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, gap: 10 },
-  progressTrack: { flex: 1, height: 4, backgroundColor: '#2A2A2A', borderRadius: 2, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: '#C8FF00', borderRadius: 2 },
-  progressLabel: { color: '#666666', fontSize: 12, minWidth: 52, textAlign: 'right' },
+  // Progress band
+  progressBand: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    marginHorizontal: 16, marginBottom: 10, padding: 14,
+    backgroundColor: CARD, borderRadius: 18, borderWidth: 1, borderColor: BORDER,
+  },
+  ringInner: { flexDirection: 'row', alignItems: 'flex-end' },
+  ringDone: { color: ACCENT, fontSize: 16, fontWeight: '800' },
+  ringTotal: { color: '#5A6663', fontSize: 10, marginBottom: 2 },
+  progressBandRight: { flex: 1 },
+  progressBandStats: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  bandStatLabel: { color: '#5A6663', fontSize: 10, fontWeight: '600', letterSpacing: 0.08, textTransform: 'uppercase' },
+  bandStatValue: { color: '#E6F1ED', fontSize: 18, fontWeight: '800', marginTop: 2 },
+  bandStatUnit: { color: '#5A6663', fontSize: 11 },
+  progressTrack: { height: 4, backgroundColor: BORDER, borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: ACCENT, borderRadius: 2 },
 
   completedBanner: {
-    marginHorizontal: 16, marginBottom: 8, backgroundColor: '#1A2E00',
-    borderRadius: 10, paddingVertical: 8, alignItems: 'center', borderWidth: 1, borderColor: '#3A5A00',
+    marginHorizontal: 16, marginBottom: 8, backgroundColor: '#152218',
+    borderRadius: 10, paddingVertical: 8, alignItems: 'center', borderWidth: 1, borderColor: ACCENT + '55',
   },
-  completedText: { color: '#C8FF00', fontSize: 14, fontWeight: '600' },
+  completedText: { color: ACCENT, fontSize: 14, fontWeight: '600' },
 
   scrollContent: { paddingHorizontal: 16, paddingTop: 4 },
 
-  // Exercise cards — tap-to-complete style
+  // Exercise cards
   exCard: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A',
-    borderRadius: 14, marginBottom: 10, padding: 14, borderWidth: 1, borderColor: '#2C2C2C', gap: 12,
+    backgroundColor: CARD, borderRadius: 16, marginBottom: 10,
+    borderWidth: 1, borderColor: BORDER, overflow: 'hidden',
   },
-  exCardDone: { borderColor: '#3A5A00', backgroundColor: '#111F00' },
-  exLeft: {},
-  progressCircle: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: '#252525',
-    borderWidth: 2, borderColor: '#3A3A3A', alignItems: 'center', justifyContent: 'center',
-    flexDirection: 'row',
+  exCardDone: { borderColor: ACCENT + '88', backgroundColor: ACCENT_DEEP },
+  exCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  exMid: { flex: 1, minWidth: 0 },
+  exName: { color: '#E6F1ED', fontSize: 15, fontWeight: '600', lineHeight: 20 },
+  exNameDone: { color: '#A8EFCC' },
+  exHint: { color: ACCENT, fontSize: 11, marginTop: 3 },
+  ringExText: { fontSize: 11, fontWeight: '700' },
+  expandBtn: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: BG, borderWidth: 1, borderColor: BORDER,
+    alignItems: 'center', justifyContent: 'center',
   },
-  progressCircleText: { color: '#C8FF00', fontSize: 15, fontWeight: '700' },
-  progressCircleDen: { color: '#555555', fontSize: 11, marginTop: 3 },
-  exMid: { flex: 1 },
-  exName: { color: '#FFFFFF', fontSize: 15, fontWeight: '600', lineHeight: 20 },
-  exNameDone: { color: '#6A9900' },
-  exSummary: { color: '#888888', fontSize: 12, marginTop: 3 },
-  exRight: { alignItems: 'center', minWidth: 32 },
-  exDoneCheck: { color: '#C8FF00', fontSize: 22, fontWeight: '700' },
-  tapHint: { color: '#3A3A3A', fontSize: 11, fontWeight: '500' },
+  expandChevron: { color: '#7E8A86', fontSize: 18, lineHeight: 20, transform: [{ rotate: '90deg' }] },
+  expandChevronOpen: { transform: [{ rotate: '-90deg' }] },
+
+  // Set table
+  setTable: {
+    paddingHorizontal: 14, paddingBottom: 12,
+    borderTopWidth: 1, borderTopColor: BORDER, paddingTop: 10,
+  },
+  setHeaderRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, gap: 8, marginBottom: 4 },
+  setHeaderCell: { color: '#5A6663', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.1 },
+  setRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 },
+  setRowDone: { opacity: 0.6 },
+  setNum: { color: '#7E8A86', fontSize: 13, width: 28, textAlign: 'center' },
+  setInput: {
+    backgroundColor: BG, borderRadius: 8, height: 40,
+    color: '#E6F1ED', fontSize: 15, textAlign: 'center', borderWidth: 1, borderColor: BORDER,
+  },
+  inputDisabled: { color: '#5A6663' },
+  checkBtn: {
+    width: 36, height: 36, borderRadius: 10, borderWidth: 1.5, borderColor: BORDER,
+    backgroundColor: BG, alignItems: 'center', justifyContent: 'center',
+  },
+  checkBtnDone: { backgroundColor: '#152218', borderColor: ACCENT },
+  checkBtnText: { color: '#3A4541', fontSize: 14 },
+  checkBtnTextDone: { color: ACCENT },
+  removeSetBtn: { width: 24, alignItems: 'center' },
+  removeSetText: { color: '#5A6663', fontSize: 20, fontWeight: '300', lineHeight: 24 },
+  addSetBtn: {
+    marginTop: 10, paddingVertical: 10, borderRadius: 8,
+    borderWidth: 1, borderColor: BORDER, borderStyle: 'dashed', alignItems: 'center',
+  },
+  addSetText: { color: '#5A6663', fontSize: 13, fontWeight: '500' },
+  exerciseNote: { color: '#5A6663', fontSize: 12, marginTop: 10, fontStyle: 'italic', lineHeight: 17 },
+  removeExRow: {
+    paddingVertical: 10, alignItems: 'center', marginBottom: 8,
+    borderWidth: 1, borderColor: '#5A1A1A', borderRadius: 8,
+  },
+  removeExText: { color: '#CC4444', fontSize: 12, fontWeight: '600' },
 
   addExerciseBtn: {
     marginTop: 4, marginBottom: 8, paddingVertical: 14, borderRadius: 12,
-    borderWidth: 1, borderColor: '#2A2A2A', borderStyle: 'dashed', alignItems: 'center',
+    borderWidth: 1, borderColor: BORDER, borderStyle: 'dashed', alignItems: 'center',
   },
-  addExerciseText: { color: '#C8FF00', fontSize: 14, fontWeight: '600' },
+  addExerciseText: { color: ACCENT, fontSize: 14, fontWeight: '600' },
 
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    padding: 16, paddingBottom: 24, backgroundColor: '#0F0F0F',
-    borderTopWidth: 1, borderTopColor: '#1E1E1E',
+    padding: 16, paddingBottom: 24,
+    backgroundColor: BG, borderTopWidth: 1, borderTopColor: BORDER,
   },
-  finishBtn: { backgroundColor: '#C8FF00', borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
-  finishBtnPartial: { backgroundColor: '#3A3A3A' },
-  finishBtnText: { color: '#0F0F0F', fontSize: 16, fontWeight: '700' },
+  finishBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  finishBtnAllDone: {
+    backgroundColor: ACCENT,
+    shadowColor: ACCENT, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 8,
+  },
+  finishBtnPartial: { backgroundColor: ACCENT + '22', borderWidth: 1, borderColor: ACCENT + '55' },
+  finishBtnDisabled: { backgroundColor: CARD, borderWidth: 1, borderColor: BORDER },
+  finishBtnText: { color: ACCENT, fontSize: 16, fontWeight: '700' },
+  finishBtnTextDark: { color: '#0B1A14' },
+  finishBtnTextDim: { color: '#3A4541' },
+
+  reopenBtn: {
+    borderRadius: 14, paddingVertical: 16, alignItems: 'center',
+    borderWidth: 1, borderColor: BORDER, backgroundColor: CARD,
+  },
+  reopenBtnText: { color: '#9CB0AA', fontSize: 15, fontWeight: '600' },
 
   centeredContent: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   restEmoji: { fontSize: 48, marginBottom: 16 },
-  infoTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', marginBottom: 8 },
-  infoSub: { color: '#555555', fontSize: 14, textAlign: 'center' },
+  infoTitle: { color: '#E6F1ED', fontSize: 20, fontWeight: '700', marginBottom: 8 },
+  infoSub: { color: '#5A6663', fontSize: 14, textAlign: 'center' },
 
-  // Detail modal
-  detailBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
-  detailSheet: {
-    backgroundColor: '#1A1A1A', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingHorizontal: 16, paddingBottom: 40, paddingTop: 12,
-  },
-  detailHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#444444', alignSelf: 'center', marginBottom: 16 },
-  detailTitleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 },
-  detailTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '700', flex: 1, marginRight: 12 },
-  detailRemove: { color: '#FF5722', fontSize: 13, paddingTop: 2 },
-
-  setHeaderRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
-  setHeaderCell: { color: '#555555', fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
-  setRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 5 },
-  setRowDone: { opacity: 0.6 },
-  setNumText: { color: '#888888', fontSize: 14, textAlign: 'center' },
-  setInput: {
-    backgroundColor: '#242424', borderRadius: 8, height: 40,
-    color: '#FFFFFF', fontSize: 15, textAlign: 'center', borderWidth: 1, borderColor: '#333333',
-  },
-  inputDisabled: { color: '#666666' },
-  checkBtn: {
-    height: 36, borderRadius: 18, backgroundColor: '#252525',
-    alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#3A3A3A',
-  },
-  checkBtnDone: { backgroundColor: '#1A3000', borderColor: '#C8FF00' },
-  checkBtnText: { color: '#555555', fontSize: 16 },
-
-  addSetBtn: {
-    marginTop: 12, paddingVertical: 10, borderRadius: 8,
-    borderWidth: 1, borderColor: '#2A2A2A', borderStyle: 'dashed', alignItems: 'center',
-  },
-  addSetText: { color: '#555555', fontSize: 13, fontWeight: '500' },
-  exerciseNote: { color: '#555555', fontSize: 12, marginTop: 12, fontStyle: 'italic', lineHeight: 17 },
-
-  // Exercise picker
-  pickerSafe: { flex: 1, backgroundColor: '#0F0F0F' },
+  // Picker
+  pickerSafe: { flex: 1, backgroundColor: BG },
   pickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
-  pickerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
-  pickerClose: { color: '#555555', fontSize: 18, padding: 4 },
+  pickerTitle: { color: '#E6F1ED', fontSize: 18, fontWeight: '700' },
+  pickerClose: { color: '#5A6663', fontSize: 18, padding: 4 },
   pickerSearchRow: { paddingHorizontal: 16, paddingBottom: 12 },
   pickerSearch: {
-    backgroundColor: '#1A1A1A', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
-    color: '#FFFFFF', fontSize: 15, borderWidth: 1, borderColor: '#2A2A2A',
+    backgroundColor: CARD, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
+    color: '#E6F1ED', fontSize: 15, borderWidth: 1, borderColor: BORDER,
   },
   pickerItem: { paddingHorizontal: 16, paddingVertical: 14 },
-  pickerItemText: { color: '#CCCCCC', fontSize: 15 },
-  pickerSep: { height: 1, backgroundColor: '#1E1E1E', marginHorizontal: 16 },
+  pickerItemText: { color: '#9CB0AA', fontSize: 15 },
+  pickerSep: { height: 1, backgroundColor: BORDER, marginHorizontal: 16 },
 });

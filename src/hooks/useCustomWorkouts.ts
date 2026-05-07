@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useAsyncStorage } from './useAsyncStorage';
+import { generateId } from '../utils/sessionUtils';
 import type { CustomWorkout, PlannedExercise } from '../types';
 
 export function useCustomWorkouts() {
@@ -10,7 +11,7 @@ export function useCustomWorkouts() {
 
   const createWorkout = useCallback(
     (name: string, exercises: PlannedExercise[]): string => {
-      const id = crypto.randomUUID();
+      const id = generateId();
       setWorkouts((prev) => [...prev, { id, name, exercises }]);
       return id;
     },
