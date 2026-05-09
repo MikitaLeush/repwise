@@ -189,6 +189,22 @@ export function useSession() {
     [sessions]
   );
 
+  const getLastReps = useCallback(
+    (exerciseId: string): number | null => {
+      for (let i = sessions.length - 1; i >= 0; i--) {
+        const ex = sessions[i].exercises.find((e) => e.exerciseId === exerciseId);
+        if (ex) {
+          const completed = ex.sets.find((s) => s.completed && s.actualReps !== null);
+          if (completed && completed.actualReps !== null) {
+            return completed.actualReps;
+          }
+        }
+      }
+      return null;
+    },
+    [sessions]
+  );
+
   return {
     sessions,
     saveSession,
@@ -201,5 +217,6 @@ export function useSession() {
     addExerciseToSession,
     removeExerciseFromSession,
     getLastWeight,
+    getLastReps,
   };
 }

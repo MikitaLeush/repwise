@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Stack, SplashScreen } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppProvider } from '../src/context/AppContext';
 import {
   useFonts,
@@ -25,10 +26,12 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <SafeAreaProvider>
-      <AppProvider>
-        <Stack screenOptions={{ headerShown: false }} />
-      </AppProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AppProvider>
+          <Stack screenOptions={{ headerShown: false }} />
+        </AppProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -1,11 +1,11 @@
 import React from 'react';
 import {
-  ScrollView,
   View,
   Text,
   StyleSheet,
   SafeAreaView,
 } from 'react-native';
+import { ScrollView } from '../utils/ScrollView';
 import { BodyDiagram } from '../components/BodyDiagram';
 import { RecoveryInfo } from '../components/RecoveryInfo';
 import { useMuscleRecovery } from '../hooks/useMuscleRecovery';

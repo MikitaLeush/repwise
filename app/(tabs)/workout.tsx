@@ -16,7 +16,9 @@ import { isToday, isPast, formatShortDate } from '../../src/utils/dateUtils';
 import { MONO, MONO_BOLD } from '../../src/utils/fonts';
 import { Ring } from '../../src/components/Ring';
 import { exercises as pplExercises } from '../../src/data/exercises';
-import type { DayOfWeek, WorkoutSession } from '../../src/types';
+import type { DayOfWeek, WorkoutSession, WeightUnit, CustomWorkout, PlannedExercise } from '../../src/types';
+import { EditWorkoutSheet } from '../../src/components/EditWorkoutSheet';
+import { SwipeTabWrapper } from '../../src/components/SwipeTabWrapper';
 
 function getExerciseChipName(id: string): string {
   const ex = pplExercises.find((e) => e.id === id);
@@ -87,17 +89,22 @@ function getThisWeekRange(): { monISO: string; sunISO: string } {
   };
 }
 
+function normalizeWeight(w: number, from: WeightUnit | undefined, to: WeightUnit): number {
+  if (!from || from === to) return w;
+  return to === 'kg' ? w / 2.20462 : w * 2.20462;
+}
+
 function computeWeekStats(
   sessions: WorkoutSession[],
   weekDays: string[],
-  schedule: Record<DayOfWeek, string>
+  schedule: Record<DayOfWeek, string>,
+  displayUnit: WeightUnit
 ): { done: number; total: number; volume: number } {
   const { monISO, sunISO } = getThisWeekRange();
   let done = 0;
   let total = 0;
   let volume = 0;
 
-  // Count non-rest days this week as total
   for (const iso of weekDays) {
     if (iso < monISO || iso > sunISO) continue;
     const dow = isoDayOfWeek(iso);
@@ -111,7 +118,7 @@ function computeWeekStats(
     for (const ex of s.exercises) {
       for (const set of ex.sets) {
         if (set.completed && set.actualWeight !== null && set.actualReps !== null) {
-          volume += set.actualWeight * set.actualReps;
+          volume += normalizeWeight(set.actualWeight, set.unit, displayUnit) * set.actualReps;
         }
       }
     }
@@ -146,7 +153,7 @@ function computeStreak(sessions: WorkoutSession[]): number {
 
 export default function WorkoutTab() {
   const router = useRouter();
-  const { schedule, plans, customWorkouts, session: sessionHook } = useApp();
+  const { schedule, plans, customWorkouts, session: sessionHook, unit } = useApp();
 
   const [now, setNow] = useState(new Date());
   const days = useMemo(() => getNextDays(7), []);
@@ -157,6 +164,7 @@ export default function WorkoutTab() {
   const [pendingDay, setPendingDay] = useState<DayOfWeek | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newWorkoutName, setNewWorkoutName] = useState('');
+  const [editingWorkout, setEditingWorkout] = useState<CustomWorkout | null>(null);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -225,10 +233,15 @@ export default function WorkoutTab() {
     setPendingDay(null);
   }
 
+  function handleSaveWorkout(id: string, name: string, exercises: PlannedExercise[]) {
+    customWorkouts.updateWorkout(id, { name, exercises });
+    setEditingWorkout(null);
+  }
+
   // Stats
   const weekStats = useMemo(
-    () => computeWeekStats(sessionHook.sessions, days, schedule.schedule),
-    [sessionHook.sessions, days, schedule.schedule]
+    () => computeWeekStats(sessionHook.sessions, days, schedule.schedule, unit.unit),
+    [sessionHook.sessions, days, schedule.schedule, unit.unit]
   );
   const streak = useMemo(() => computeStreak(sessionHook.sessions), [sessionHook.sessions]);
 
@@ -256,6 +269,7 @@ export default function WorkoutTab() {
   const weekDonePct = weekStats.total > 0 ? (weekStats.done / weekStats.total) * 100 : 0;
 
   return (
+    <SwipeTabWrapper route="workout">
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* ── Header ── */}
       <View style={styles.header}>
@@ -400,7 +414,7 @@ export default function WorkoutTab() {
           <View style={[styles.statTile, { flex: 1 }]}>
             <Text style={[styles.statLabel, { fontFamily: MONO }]}>VOLUME</Text>
             <Text style={[styles.statValue, { fontFamily: MONO_BOLD }]}>{volFormatted}</Text>
-            <Text style={[styles.statSub, { fontFamily: MONO }]}>kg total</Text>
+            <Text style={[styles.statSub, { fontFamily: MONO }]}>{unit.unit} total</Text>
           </View>
 
           {/* Streak */}
@@ -421,10 +435,10 @@ export default function WorkoutTab() {
               const vol = s.exercises.reduce((acc, ex) =>
                 acc + ex.sets.reduce((a, set) =>
                   set.completed && set.actualWeight !== null && set.actualReps !== null
-                    ? a + set.actualWeight * set.actualReps : a, 0), 0);
+                    ? a + normalizeWeight(set.actualWeight, set.unit, unit.unit) * set.actualReps : a, 0), 0);
               const dow = isoDayOfWeek(s.date);
               const label = getWorkoutLabel(s.workoutType);
-              const volStr = vol > 0 ? ` · ${vol >= 1000 ? `${(vol / 1000).toFixed(1)}k` : Math.round(vol)} kg` : '';
+              const volStr = vol > 0 ? ` · ${vol >= 1000 ? `${(vol / 1000).toFixed(1)}k` : Math.round(vol)} ${unit.unit}` : '';
               return (
                 <TouchableOpacity
                   key={s.id}
@@ -489,14 +503,22 @@ export default function WorkoutTab() {
                   {customWorkouts.workouts.map((w) => {
                     const selected = editDay ? schedule.schedule[editDay] === w.id : false;
                     return (
-                      <TouchableOpacity
-                        key={w.id}
-                        style={[styles.option, selected && styles.optionSelected]}
-                        onPress={() => handleAssign(w.id)}
-                      >
-                        <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{w.name}</Text>
+                      <View key={w.id} style={[styles.option, selected && styles.optionSelected]}>
+                        <TouchableOpacity style={{ flex: 1 }} onPress={() => handleAssign(w.id)}>
+                          <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{w.name}</Text>
+                        </TouchableOpacity>
                         {selected && <Text style={[styles.checkmark, { fontFamily: MONO_BOLD }]}>✓</Text>}
-                      </TouchableOpacity>
+                        <TouchableOpacity
+                          hitSlop={10}
+                          onPress={() => {
+                            setEditDay(null);
+                            setEditDayISO(null);
+                            setEditingWorkout(w);
+                          }}
+                        >
+                          <Text style={[styles.editIcon, { fontFamily: MONO }]}>✏</Text>
+                        </TouchableOpacity>
+                      </View>
                     );
                   })}
                 </>
@@ -542,7 +564,15 @@ export default function WorkoutTab() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <EditWorkoutSheet
+        visible={editingWorkout !== null}
+        workout={editingWorkout}
+        onClose={() => setEditingWorkout(null)}
+        onSave={handleSaveWorkout}
+      />
     </SafeAreaView>
+    </SwipeTabWrapper>
   );
 }
 
@@ -694,4 +724,5 @@ const styles = StyleSheet.create({
   createConfirmBtn: { backgroundColor: ACCENT, borderRadius: 12, paddingVertical: 15, alignItems: 'center' },
   createConfirmBtnDisabled: { backgroundColor: '#1f2825' },
   createConfirmText: { color: '#0B1A14', fontSize: 15, fontWeight: '700' },
+  editIcon: { color: '#5A6663', fontSize: 16, paddingLeft: 10 },
 });

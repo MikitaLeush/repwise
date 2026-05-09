@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -10,8 +11,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useApp } from '../../src/context/AppContext';
 import { TIME_MULTIPLIERS } from '../../src/hooks/useDevSettings';
+import { VOLUME_REFERENCE, LANDMARK_TARGETS, LandmarkMode } from '../../src/hooks/useVolumeTargets';
 import { PageHeader } from '../../src/components/PageHeader';
 import { MONO, MONO_BOLD } from '../../src/utils/fonts';
+import { EditWorkoutSheet } from '../../src/components/EditWorkoutSheet';
+import { SwipeTabWrapper } from '../../src/components/SwipeTabWrapper';
+import type { CustomWorkout, PlannedExercise } from '../../src/types';
 
 const ACCENT = '#5BD1A0';
 const ACCENT_DEEP = '#13352A';
@@ -20,6 +25,12 @@ const CARD = '#11181A';
 const BORDER = '#1f2825';
 
 // ─── Training reference data ──────────────────────────────────────────────────
+
+// Volume muscles in display order (must match VOLUME_MUSCLES in useVolumeTargets)
+const VOLUME_MUSCLES_ORDERED = [
+  'Chest', 'Back', 'Shoulders', 'Triceps', 'Biceps',
+  'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Core',
+] as const;
 
 const RPE_ROWS = [
   { rpe: '10',  rir: '0',   feel: 'Max effort — nothing left' },
@@ -30,25 +41,26 @@ const RPE_ROWS = [
   { rpe: '6',   rir: '4–5', feel: 'Light — warm-up territory' },
 ];
 
-const VOLUME_ROWS = [
-  { muscle: 'Chest',       mev: '8–10',  mav: '12–20', mrv: '20–22' },
-  { muscle: 'Back',        mev: '8–10',  mav: '12–20', mrv: '20–25' },
-  { muscle: 'Quads',       mev: '8–10',  mav: '12–18', mrv: '18–22' },
-  { muscle: 'Hamstrings',  mev: '6–8',   mav: '10–16', mrv: '16–20' },
-  { muscle: 'Glutes',      mev: '4–6',   mav: '8–14',  mrv: '14–20' },
-  { muscle: 'Side Delts',  mev: '8–10',  mav: '14–22', mrv: '22–28' },
-  { muscle: 'Rear Delts',  mev: '6–8',   mav: '10–16', mrv: '16–22' },
-  { muscle: 'Front Delts', mev: '0–4',   mav: '4–8',   mrv: '8–12'  },
-  { muscle: 'Biceps',      mev: '6–8',   mav: '10–16', mrv: '16–22' },
-  { muscle: 'Triceps',     mev: '6–8',   mav: '10–16', mrv: '16–18' },
-  { muscle: 'Calves',      mev: '6–8',   mav: '10–16', mrv: '16–20' },
-  { muscle: 'Abs',         mev: '4–6',   mav: '8–14',  mrv: '14–18' },
-];
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ProfileTab() {
-  const { unit, devSettings } = useApp();
+  const { unit, devSettings, volumeTargets, customWorkouts, recovery } = useApp();
+  const [landmark, setLandmark] = useState<LandmarkMode>('MAV');
+  const [editingWorkout, setEditingWorkout] = useState<CustomWorkout | null>(null);
+
+  function applyLandmark(mode: LandmarkMode) {
+    setLandmark(mode);
+    const targets = LANDMARK_TARGETS[mode];
+    for (const [muscle, sets] of Object.entries(targets)) {
+      volumeTargets.setTarget(muscle, sets);
+    }
+  }
+
+  function handleSaveWorkout(id: string, name: string, exercises: PlannedExercise[]) {
+    customWorkouts.updateWorkout(id, { name, exercises });
+    setEditingWorkout(null);
+  }
 
   function handleWipeData() {
     Alert.alert(
@@ -69,6 +81,7 @@ export default function ProfileTab() {
   }
 
   return (
+    <SwipeTabWrapper route="profile">
     <SafeAreaView style={styles.safe} edges={['top']}>
       <PageHeader title="Profile" sub="Settings & preferences" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -108,6 +121,36 @@ export default function ProfileTab() {
           </View>
         </View>
 
+        {customWorkouts.workouts.length > 0 && (
+          <>
+            <SectionHeader title="My Workouts" sub="Edit custom workout templates" />
+            <View style={styles.card}>
+              {customWorkouts.workouts.map((w, i) => (
+                <View
+                  key={w.id}
+                  style={[
+                    styles.manageRow,
+                    i < customWorkouts.workouts.length - 1 && styles.manageRowBorder,
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.manageName}>{w.name}</Text>
+                    <Text style={[styles.manageMeta, { fontFamily: MONO }]}>
+                      {w.exercises.length} exercise{w.exercises.length !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.manageEditBtn}
+                    onPress={() => setEditingWorkout(w)}
+                  >
+                    <Text style={[styles.manageEditText, { fontFamily: MONO_BOLD }]}>Edit →</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
         {/* ── RPE guide ── */}
         <SectionHeader title="RPE / RIR Guide" sub="Reps in reserve scale for effort" />
         <View style={styles.card}>
@@ -131,22 +174,42 @@ export default function ProfileTab() {
         {/* ── Volume landmarks ── */}
         <SectionHeader title="Volume Landmarks" sub="Sets per week for each muscle" />
         <View style={styles.card}>
-          <View style={styles.tableHeader}>
-            <Text style={[styles.tableHead, styles.colMuscle, { fontFamily: MONO_BOLD }]}>MUSCLE</Text>
-            <Text style={[styles.tableHead, styles.colVol, { fontFamily: MONO_BOLD }]}>MEV</Text>
-            <Text style={[styles.tableHead, styles.colVol, { fontFamily: MONO_BOLD }]}>MAV</Text>
-            <Text style={[styles.tableHead, styles.colVol, { fontFamily: MONO_BOLD }]}>MRV</Text>
+          {/* Landmark slider */}
+          <View style={styles.landmarkSlider}>
+            {(['MEV', 'MAV', 'MRV'] as LandmarkMode[]).map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                style={[styles.landmarkBtn, landmark === mode && styles.landmarkBtnActive]}
+                onPress={() => applyLandmark(mode)}
+              >
+                <Text style={[styles.landmarkBtnText, { fontFamily: MONO_BOLD }, landmark === mode && styles.landmarkBtnTextActive]}>
+                  {mode}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
-          {VOLUME_ROWS.map((r, i) => (
-            <View key={r.muscle} style={[styles.tableRow, i < VOLUME_ROWS.length - 1 && styles.tableRowBorder]}>
-              <Text style={[styles.tableCell, styles.colMuscle]}>{r.muscle}</Text>
-              <Text style={[styles.tableCell, styles.colVol, { fontFamily: MONO }]}>{r.mev}</Text>
-              <Text style={[styles.tableCell, styles.colVol, styles.cellAccent, { fontFamily: MONO_BOLD }]}>{r.mav}</Text>
-              <Text style={[styles.tableCell, styles.colVol, { fontFamily: MONO }]}>{r.mrv}</Text>
-            </View>
-          ))}
+
+          {/* Table */}
+          <View style={styles.volTableHeader}>
+            <Text style={[styles.tableHead, styles.volColMuscle, { fontFamily: MONO_BOLD }]}>MUSCLE</Text>
+            <Text style={[styles.tableHead, styles.volColRef, { fontFamily: MONO_BOLD }]}>MEV</Text>
+            <Text style={[styles.tableHead, styles.volColRef, { fontFamily: MONO_BOLD }]}>MAV</Text>
+            <Text style={[styles.tableHead, styles.volColRef, { fontFamily: MONO_BOLD }]}>MRV</Text>
+          </View>
+          {VOLUME_MUSCLES_ORDERED.map((muscle, i) => {
+            const ref = VOLUME_REFERENCE[muscle];
+            return (
+              <View key={muscle} style={[styles.tableRow, i < VOLUME_MUSCLES_ORDERED.length - 1 && styles.tableRowBorder]}>
+                <Text style={[styles.tableCell, styles.volColMuscle]}>{muscle}</Text>
+                <Text style={[styles.tableCell, styles.volColRef, { fontFamily: MONO }, landmark === 'MEV' && styles.volColActive]}>{ref?.mev ?? '—'}</Text>
+                <Text style={[styles.tableCell, styles.volColRef, { fontFamily: MONO }, landmark === 'MAV' && styles.volColActive]}>{ref?.mav ?? '—'}</Text>
+                <Text style={[styles.tableCell, styles.volColRef, { fontFamily: MONO }, landmark === 'MRV' && styles.volColActive]}>{ref?.mrv ?? '—'}</Text>
+              </View>
+            );
+          })}
           <Text style={styles.refNote}>
-            MEV = Minimum Effective Volume · MAV = Maximum Adaptive Volume · MRV = Maximum Recoverable Volume
+            MEV = Minimum Effective Volume · MAV = Maximum Adaptive Volume · MRV = Maximum Recoverable Volume{'\n'}
+            Selected landmark sets target for body diagram Weekly Sets mode.
           </Text>
         </View>
 
@@ -170,6 +233,13 @@ export default function ProfileTab() {
               </TouchableOpacity>
             ))}
           </View>
+          <View style={{ height: 1, backgroundColor: BORDER, marginVertical: 14 }} />
+          <TouchableOpacity style={styles.resetStrainBtn} onPress={recovery.resetAll}>
+            <Text style={styles.resetStrainText}>Reset All Muscle Strain</Text>
+          </TouchableOpacity>
+          <Text style={[styles.devNote, { marginBottom: 0, marginTop: 6 }]}>
+            Clears all muscle training timestamps.
+          </Text>
         </View>
 
         {/* ── Danger zone ── */}
@@ -183,7 +253,14 @@ export default function ProfileTab() {
 
         <View style={{ height: 32 }} />
       </ScrollView>
+      <EditWorkoutSheet
+        visible={editingWorkout !== null}
+        workout={editingWorkout}
+        onClose={() => setEditingWorkout(null)}
+        onSave={handleSaveWorkout}
+      />
     </SafeAreaView>
+    </SwipeTabWrapper>
   );
 }
 
@@ -248,6 +325,20 @@ const styles = StyleSheet.create({
   colVol: { width: 54, textAlign: 'center' },
   refNote: { color: '#3A4541', fontSize: 11, marginTop: 12, lineHeight: 16 },
 
+  // Volume landmarks
+  landmarkSlider: {
+    flexDirection: 'row', backgroundColor: BG, borderRadius: 10,
+    padding: 3, gap: 3, marginBottom: 14,
+  },
+  landmarkBtn: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
+  landmarkBtnActive: { backgroundColor: ACCENT },
+  landmarkBtnText: { color: '#5A6663', fontSize: 13, fontWeight: '600' },
+  landmarkBtnTextActive: { color: '#0B1A14' },
+  volTableHeader: { flexDirection: 'row', marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: BORDER },
+  volColMuscle: { flex: 1 },
+  volColRef: { width: 52, textAlign: 'center' as const, color: '#5A6663', fontSize: 13 },
+  volColActive: { color: ACCENT, fontWeight: '700' },
+
   // Developer
   devNote: { color: '#5A6663', fontSize: 12, marginTop: 4, marginBottom: 14, lineHeight: 17 },
   speedRow: { flexDirection: 'row', gap: 8 },
@@ -258,9 +349,27 @@ const styles = StyleSheet.create({
   speedBtnActive: { backgroundColor: ACCENT + '20', borderColor: ACCENT },
   speedText: { color: '#5A6663', fontSize: 14, fontWeight: '600' },
   speedTextActive: { color: ACCENT },
+  resetStrainBtn: {
+    borderWidth: 1, borderColor: BORDER, borderRadius: 10,
+    paddingVertical: 10, alignItems: 'center' as const,
+  },
+  resetStrainText: { color: '#FF5722', fontSize: 13, fontWeight: '600' },
 
   // Danger zone
   wipeBtn: { borderWidth: 1, borderColor: '#5A1A1A', borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   wipeBtnText: { color: '#CC3333', fontSize: 15, fontWeight: '600' },
   wipeNote: { color: '#3A4541', fontSize: 12, textAlign: 'center', marginTop: 8 },
+
+  // My Workouts
+  manageRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
+  },
+  manageRowBorder: { borderBottomWidth: 1, borderBottomColor: BORDER },
+  manageName: { color: '#E6F1ED', fontSize: 15, fontWeight: '600' },
+  manageMeta: { color: '#5A6663', fontSize: 12, marginTop: 2 },
+  manageEditBtn: {
+    backgroundColor: BG, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7,
+    borderWidth: 1, borderColor: BORDER,
+  },
+  manageEditText: { color: ACCENT, fontSize: 13, fontWeight: '600' },
 });

@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.3.0] — 2026-05-09
+
+### Progress Tab — Muscle Status overhaul
+
+- **Weekly Sets mode** — body diagram now colours muscles by volume zone (None → Low → Approaching → Target → Peak → Over MRV), backed by per-muscle set targets from `useVolumeTargets`
+- **Volume targets** — per-muscle MEV/MAV/MRV presets (hypertrophy research values); fully configurable via the Profile tab under Volume Landmarks
+- **Full-screen diagram** — double-tap anywhere on the diagram box to expand; swipe down or press × to close
+- **Tab swipe locked** while expanded so accidental horizontal swipes don't navigate away
+- **Expanded modal layout** — single side (Front/Back toggle), scrollable muscle list with bar chart, sort controls below diagram
+- **Sort by 2×2 grid** — Name / Recovery / Sets / Group; replaces the hidden expandable chip; Group puts upper-body muscles first (chest, deltoids, biceps, triceps, forearm, trapezius, upper-back, lower-back, abs, obliques), lower-body below
+- Muscle list text size increased (11 → 13 px) for readability in expanded view
+
+### Workout Session
+
+- **EditWorkoutSheet** — new bottom sheet for editing exercises inline: reorder, remove, change set counts
+- **Working weights** — last-used weight per exercise persisted across sessions via `repwise_working_weights`
+- Platform-specific `ScrollView` wrappers (`ScrollView.ts` / `.native.ts` / `.web.ts`) fix web scrolling regression introduced in 0.2.0
+
+### Architecture
+
+- `SwipeTabWrapper` — horizontal swipe navigation between the four tabs; accepts `swipeEnabled` prop (ref-backed so PanResponder sees live value) to lock swipe during modal overlays
+- `useVolumeTargets` hook — AsyncStorage key `repwise_volume_targets`; default evidence-based targets for 10 muscle groups
+- `useWorkingWeights` hook — AsyncStorage key `repwise_working_weights`; weight + unit per exercise
+- `volumeMapping.ts` — `computeWeeklySetsPerMuscle`, `buildVolumeBodyData`, `getVolumeZone`, `getVolumeColor`, `slugToDisplayMuscle`; shared between expanded modal and inline card
+- `AppContext` wires `volumeTargets` and `workingWeights` into `useApp()`
+
+### Bug fixes
+
+- Gesture conflict on right-leg SVG muscles — replaced `Pressable.onPress` double-tap detection with bubbling `onTouchEnd` on a wrapper View; tap now registers anywhere on the diagram regardless of which SVG element captures it
+- Modal swipe-down blocked by SVG — fixed by placing an `absoluteFill` transparent overlay above the Body component with `onStartShouldSetPanResponder: true`; drag handle at top of modal also retained as a second swipe zone
+
+---
+
 ## [0.2.0] — 2026-05-06
 
 ### Bug Fixes

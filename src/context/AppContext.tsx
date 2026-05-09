@@ -8,6 +8,8 @@ import { useWorkoutPlans } from '../hooks/useWorkoutPlans';
 import { useMuscleRecovery } from '../hooks/useMuscleRecovery';
 import { useDevSettings } from '../hooks/useDevSettings';
 import { useExerciseFavorites } from '../hooks/useExerciseFavorites';
+import { useVolumeTargets } from '../hooks/useVolumeTargets';
+import { useWorkingWeights } from '../hooks/useWorkingWeights';
 
 type AppContextValue = {
   session: ReturnType<typeof useSession>;
@@ -19,6 +21,8 @@ type AppContextValue = {
   recovery: ReturnType<typeof useMuscleRecovery>;
   devSettings: ReturnType<typeof useDevSettings>;
   exerciseFavorites: ReturnType<typeof useExerciseFavorites>;
+  volumeTargets: ReturnType<typeof useVolumeTargets>;
+  workingWeights: ReturnType<typeof useWorkingWeights>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -35,6 +39,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     recovery: useMuscleRecovery(devSettings.timeMultiplier),
     devSettings,
     exerciseFavorites: useExerciseFavorites(),
+    volumeTargets: useVolumeTargets(),
+    workingWeights: useWorkingWeights(),
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

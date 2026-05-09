@@ -26,7 +26,7 @@ import { getExercise, exercises as pplExercises } from '../../src/data/exercises
 import { exerciseDB } from '../../src/data/exercisedb';
 import { Ring } from '../../src/components/Ring';
 import { MONO, MONO_BOLD } from '../../src/utils/fonts';
-import type { WorkoutSession, LoggedSet, WorkoutBlueprint, MuscleGroup } from '../../src/types';
+import type { WorkoutSession, LoggedSet, LoggedExercise, WorkoutBlueprint, MuscleGroup, WeightUnit } from '../../src/types';
 
 const MUSCLE_TO_SLUG: Partial<Record<MuscleGroup, string>> = {
   chest: 'chest', back: 'upper-back', shoulders: 'deltoids', triceps: 'triceps',
@@ -48,7 +48,7 @@ export default function DailyWorkoutScreen() {
   const router = useRouter();
   const { date: dateParam } = useLocalSearchParams<{ date: string }>();
   const date = Array.isArray(dateParam) ? dateParam[0] : (dateParam ?? '');
-  const { session: sessionHook, unit, recovery, plans, schedule, customWorkouts } = useApp();
+  const { session: sessionHook, unit, recovery, plans, schedule, customWorkouts, workingWeights } = useApp();
 
   const dayOfWeek = isoToDayOfWeek(date);
   const workoutId = schedule.schedule[dayOfWeek];
@@ -74,21 +74,59 @@ export default function DailyWorkoutScreen() {
     if (!plan || initializedRef.current) return;
     initializedRef.current = true;
     const existing = sessionHook.sessions.find((s) => s.date === date && s.workoutType === plan.id);
-    const session = existing ?? buildBlankSession(date, plan, unit.unit, sessionHook.getLastWeight);
-    if (!existing) sessionHook.saveSession(session);
+    // Rebuild if session exists but has no exercises while the template does —
+    // happens when user opens a day before adding exercises to the custom workout.
+    const needsRebuild = existing
+      && existing.exercises.length === 0
+      && plan.exercises.length > 0;
+    const session = (!existing || needsRebuild) ? buildBlankSession(
+      date, plan, unit.unit,
+      (id) => workingWeights.getWorkingWeight(id) ?? sessionHook.getLastWeight(id),
+      sessionHook.getLastReps
+    ) : existing;
+    if (!existing || needsRebuild) sessionHook.saveSession(session);
     setActiveSession(session);
 
     const initInputs: Record<string, InputState> = {};
     for (const ex of session.exercises) {
       for (const s of ex.sets) {
+        let displayWeight = '';
+        if (s.actualWeight !== null) {
+          if (s.unit === unit.unit) {
+            displayWeight = String(s.actualWeight);
+          } else {
+            const factor = unit.unit === 'lb' ? 2.20462 : 1 / 2.20462;
+            displayWeight = (s.actualWeight * factor).toFixed(1);
+          }
+        }
         initInputs[inputKey(ex.exerciseId, s.setNumber)] = {
-          weight: s.actualWeight !== null ? String(s.actualWeight) : '',
+          weight: displayWeight,
           reps: s.actualReps !== null ? String(s.actualReps) : '',
         };
       }
     }
     setInputs(initInputs);
   }, [plan?.id]);
+
+  const prevUnitRef = useRef<WeightUnit>(unit.unit);
+  useEffect(() => {
+    const from = prevUnitRef.current;
+    const to = unit.unit;
+    prevUnitRef.current = to;
+    if (from === to) return;
+    const factor = to === 'lb' ? 2.20462 : 1 / 2.20462;
+    setInputs((prev) => {
+      const next: Record<string, InputState> = {};
+      for (const [key, inp] of Object.entries(prev)) {
+        const w = parseFloat(inp.weight);
+        next[key] = {
+          ...inp,
+          weight: inp.weight.trim() === '' || isNaN(w) ? inp.weight : (w * factor).toFixed(1),
+        };
+      }
+      return next;
+    });
+  }, [unit.unit]);
 
   const pickerExercises = useMemo(() => {
     const q = pickerQuery.toLowerCase().trim();
@@ -134,6 +172,21 @@ export default function DailyWorkoutScreen() {
     if (!ex) return;
     const nextSet = ex.sets.find((s) => !s.completed);
     if (!nextSet) return;
+    const key = inputKey(exerciseId, nextSet.setNumber);
+    const inp = inputs[key] ?? { weight: '', reps: '' };
+    if (!inp.weight.trim() || !inp.reps.trim()) {
+      Alert.alert('Enter Weight & Reps', `Fill in weight and reps for set ${nextSet.setNumber} before marking it done.`);
+      return;
+    }
+    const completedWeight = parseFloat(inp.weight) || 0;
+    flushInput(exerciseId, nextSet.setNumber);
+    if (completedWeight > 0) checkWorkingWeightUpdate(exerciseId, nextSet.setNumber, completedWeight);
+    // Auto-fill next uncompleted set if its inputs are empty
+    const nextNext = ex.sets.find((s) => s.setNumber > nextSet.setNumber && !s.completed);
+    if (nextNext) {
+      const nk = inputKey(exerciseId, nextNext.setNumber);
+      setInputs((prev) => prev[nk]?.weight.trim() ? prev : { ...prev, [nk]: { weight: inp.weight, reps: inp.reps } });
+    }
     toggleSetComplete(exerciseId, nextSet.setNumber, false);
   }
 
@@ -170,7 +223,37 @@ export default function DailyWorkoutScreen() {
     if (!inp) return;
     const actualWeight = inp.weight.trim() === '' ? null : parseFloat(inp.weight) || null;
     const actualReps = inp.reps.trim() === '' ? null : parseInt(inp.reps, 10) || null;
-    sessionHook.updateSet(activeSession.id, exerciseId, setNumber, { actualWeight, actualReps });
+    sessionHook.updateSet(activeSession.id, exerciseId, setNumber, { actualWeight, actualReps, unit: unit.unit });
+  }
+
+  function checkWorkingWeightUpdate(exerciseId: string, newlyCompletedSetNumber: number, completedWeight: number) {
+    if (!activeSession) return;
+    const ex = activeSession.exercises.find((e) => e.exerciseId === exerciseId);
+    if (!ex) return;
+
+    const allCompleted = ex.sets
+      .map((s) =>
+        s.setNumber === newlyCompletedSetNumber
+          ? { ...s, completed: true, actualWeight: completedWeight, unit: unit.unit }
+          : s
+      )
+      .filter((s) => s.completed && s.actualWeight !== null)
+      .sort((a, b) => a.setNumber - b.setNumber);
+
+    if (allCompleted.length < 3) return;
+
+    const last3 = allCompleted.slice(-3);
+    const toDisplay = (w: number, fromUnit: WeightUnit) => {
+      if (fromUnit === unit.unit) return w;
+      return unit.unit === 'lb' ? w * 2.20462 : w / 2.20462;
+    };
+    const ww = workingWeights.getWorkingWeight(exerciseId);
+    const wwInDisplay = ww ? toDisplay(ww.weight, ww.unit) : 0;
+    const weightsInDisplay = last3.map((s) => toDisplay(s.actualWeight!, s.unit));
+
+    if (weightsInDisplay.every((w) => w >= wwInDisplay)) {
+      workingWeights.setWorkingWeight(exerciseId, completedWeight, unit.unit);
+    }
   }
 
   function handleAddSet(exerciseId: string) {
@@ -239,19 +322,43 @@ export default function DailyWorkoutScreen() {
       return;
     }
     const DEFAULT_SETS = 3;
-    sessionHook.addExerciseToSession(activeSession.id, exerciseId, DEFAULT_SETS, unit.unit);
-    const newExercise = {
-      exerciseId, order: activeSession.exercises.length + 1,
+
+    const src = workingWeights.getWorkingWeight(exerciseId) ?? sessionHook.getLastWeight(exerciseId);
+    let prefillWeight: number | null = null;
+    if (src) {
+      const { weight, unit: fromUnit } = src;
+      prefillWeight = fromUnit === unit.unit ? weight
+        : unit.unit === 'lb' ? parseFloat((weight * 2.20462).toFixed(1))
+        : parseFloat((weight / 2.20462).toFixed(1));
+    }
+    const prefillReps = sessionHook.getLastReps(exerciseId);
+
+    const newExercise: LoggedExercise = {
+      exerciseId,
+      order: activeSession.exercises.length + 1,
       sets: Array.from({ length: DEFAULT_SETS }, (_, i) => ({
-        setNumber: i + 1, actualReps: null, actualWeight: null,
-        unit: unit.unit, completed: false, skipped: false,
+        setNumber: i + 1,
+        actualReps: prefillReps,
+        actualWeight: prefillWeight,
+        unit: unit.unit,
+        completed: false,
+        skipped: false,
       })),
     };
-    setActiveSession((prev) => prev ? { ...prev, exercises: [...prev.exercises, newExercise] } : prev);
+    const updatedSession = { ...activeSession, exercises: [...activeSession.exercises, newExercise] };
+    sessionHook.saveSession(updatedSession);
+    setActiveSession(updatedSession);
+
     const newInputs: Record<string, InputState> = {};
-    for (let i = 1; i <= DEFAULT_SETS; i++) newInputs[inputKey(exerciseId, i)] = { weight: '', reps: '' };
+    for (let i = 1; i <= DEFAULT_SETS; i++) {
+      newInputs[inputKey(exerciseId, i)] = {
+        weight: prefillWeight !== null ? String(prefillWeight) : '',
+        reps: prefillReps !== null ? String(prefillReps) : '',
+      };
+    }
     setInputs((prev) => ({ ...prev, ...newInputs }));
-    setShowPicker(false); setPickerQuery('');
+    setShowPicker(false);
+    setPickerQuery('');
   }
 
   function handleFinish() {
@@ -369,6 +476,8 @@ export default function DailyWorkoutScreen() {
             const nextHint = getNextSetHint(ex.exerciseId);
             const pctEx = totalSetsEx > 0 ? (doneSetsEx / totalSetsEx) * 100 : 0;
 
+            const nextSet = ex.sets.find((s) => !s.completed) ?? null;
+
             return (
               <View
                 key={ex.exerciseId}
@@ -378,10 +487,10 @@ export default function DailyWorkoutScreen() {
                 <Pressable
                   style={styles.exCardHeader}
                   onPress={() => handleExTap(ex.exerciseId)}
-                  onLongPress={() => handleRemoveExercise(ex.exerciseId, name)}
-                  delayLongPress={600}
+                  onLongPress={() => toggleExpand(ex.exerciseId)}
+                  delayLongPress={400}
                 >
-                  <Ring pct={pctEx} size={44} stroke={4} color={allExDone ? ACCENT : ACCENT} trackColor={BORDER}>
+                  <Ring pct={pctEx} size={44} stroke={4} color={ACCENT} trackColor={BORDER}>
                     <Text style={[styles.ringExText, { fontFamily: MONO_BOLD, color: allExDone ? ACCENT : '#E6F1ED' }]}>
                       {allExDone ? '✓' : `${doneSetsEx}/${totalSetsEx}`}
                     </Text>
@@ -389,18 +498,41 @@ export default function DailyWorkoutScreen() {
 
                   <View style={styles.exMid}>
                     <Text style={[styles.exName, allExDone && styles.exNameDone]} numberOfLines={2}>{name}</Text>
-                    {nextHint && !allExDone ? (
-                      <Text style={[styles.exHint, { fontFamily: MONO }]}>{nextHint}</Text>
-                    ) : null}
+                    {(() => {
+                      const ww = workingWeights.getWorkingWeight(ex.exerciseId);
+                      if (!ww) return null;
+                      const displayWW = ww.unit === unit.unit ? ww.weight
+                        : unit.unit === 'lb' ? parseFloat((ww.weight * 2.20462).toFixed(1))
+                        : parseFloat((ww.weight / 2.20462).toFixed(1));
+                      return (
+                        <Text style={[styles.wwHint, { fontFamily: MONO }]}>WW {displayWW} {unit.unit}</Text>
+                      );
+                    })()}
                   </View>
 
-                  <TouchableOpacity
-                    style={styles.expandBtn}
-                    onPress={(e) => { e.stopPropagation?.(); toggleExpand(ex.exerciseId); }}
-                    hitSlop={8}
-                  >
-                    <Text style={[styles.expandChevron, isOpen && styles.expandChevronOpen]}>›</Text>
-                  </TouchableOpacity>
+                  {!allExDone && !isCompleted && nextSet ? (
+                    <View style={styles.inlineInputRow}>
+                      <TextInput
+                        style={styles.inlineInput}
+                        value={inputs[inputKey(ex.exerciseId, nextSet.setNumber)]?.weight ?? ''}
+                        onChangeText={(v) => handleWeightChange(ex.exerciseId, nextSet.setNumber, v)}
+                        onBlur={() => flushInput(ex.exerciseId, nextSet.setNumber)}
+                        keyboardType="decimal-pad"
+                        placeholder="wt"
+                        placeholderTextColor="#3A4541"
+                      />
+                      <Text style={[styles.inlineX, { fontFamily: MONO }]}>×</Text>
+                      <TextInput
+                        style={[styles.inlineInput, { width: 44 }]}
+                        value={inputs[inputKey(ex.exerciseId, nextSet.setNumber)]?.reps ?? ''}
+                        onChangeText={(v) => handleRepsChange(ex.exerciseId, nextSet.setNumber, v)}
+                        onBlur={() => flushInput(ex.exerciseId, nextSet.setNumber)}
+                        keyboardType="number-pad"
+                        placeholder="reps"
+                        placeholderTextColor="#3A4541"
+                      />
+                    </View>
+                  ) : null}
                 </Pressable>
 
                 {/* Inline set table */}
@@ -455,7 +587,21 @@ export default function DailyWorkoutScreen() {
 
                           <TouchableOpacity
                             style={[styles.checkBtn, s.completed && styles.checkBtnDone]}
-                            onPress={() => toggleSetComplete(ex.exerciseId, s.setNumber, s.completed)}
+                            onPress={() => {
+                              if (!s.completed) {
+                                flushInput(ex.exerciseId, s.setNumber);
+                                const inp = inputs[inputKey(ex.exerciseId, s.setNumber)];
+                                const w = inp?.weight ? parseFloat(inp.weight) || 0 : 0;
+                                if (w > 0) checkWorkingWeightUpdate(ex.exerciseId, s.setNumber, w);
+                                // Auto-fill next uncompleted set if empty
+                                const nextSet = ex.sets.find((s2) => s2.setNumber > s.setNumber && !s2.completed);
+                                if (nextSet && inp) {
+                                  const nk = inputKey(ex.exerciseId, nextSet.setNumber);
+                                  setInputs((prev) => prev[nk]?.weight.trim() ? prev : { ...prev, [nk]: { weight: inp.weight, reps: inp.reps } });
+                                }
+                              }
+                              toggleSetComplete(ex.exerciseId, s.setNumber, s.completed);
+                            }}
                             disabled={isCompleted}
                           >
                             <Text style={[styles.checkBtnText, s.completed && styles.checkBtnTextDone, { fontFamily: MONO_BOLD }]}>
@@ -642,15 +788,15 @@ const styles = StyleSheet.create({
   exMid: { flex: 1, minWidth: 0 },
   exName: { color: '#E6F1ED', fontSize: 15, fontWeight: '600', lineHeight: 20 },
   exNameDone: { color: '#A8EFCC' },
-  exHint: { color: ACCENT, fontSize: 11, marginTop: 3 },
+  wwHint: { color: '#3A7A58', fontSize: 10, marginTop: 2 },
   ringExText: { fontSize: 11, fontWeight: '700' },
-  expandBtn: {
-    width: 32, height: 32, borderRadius: 10,
-    backgroundColor: BG, borderWidth: 1, borderColor: BORDER,
-    alignItems: 'center', justifyContent: 'center',
+  inlineInputRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  inlineInput: {
+    width: 52, height: 36, backgroundColor: BG, borderRadius: 8,
+    color: '#E6F1ED', fontSize: 13, textAlign: 'center',
+    borderWidth: 1, borderColor: BORDER,
   },
-  expandChevron: { color: '#7E8A86', fontSize: 18, lineHeight: 20, transform: [{ rotate: '90deg' }] },
-  expandChevronOpen: { transform: [{ rotate: '-90deg' }] },
+  inlineX: { color: '#5A6663', fontSize: 12 },
 
   // Set table
   setTable: {

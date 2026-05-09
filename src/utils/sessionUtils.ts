@@ -17,7 +17,8 @@ export function buildBlankSession(
   date: string,
   blueprint: WorkoutBlueprint,
   unit: WeightUnit = 'kg',
-  getLastWeight?: (exerciseId: string) => { weight: number; unit: WeightUnit } | null
+  getLastWeight?: (exerciseId: string) => { weight: number; unit: WeightUnit } | null,
+  getLastReps?: (exerciseId: string) => number | null
 ): WorkoutSession {
   return {
     id: generateId(),
@@ -34,13 +35,14 @@ export function buildBlankSession(
             ? +(lastWeight.weight / 2.20462).toFixed(2)
             : +(lastWeight.weight * 2.20462).toFixed(1);
       }
+      const prefillReps = getLastReps ? (getLastReps(pe.exerciseId) ?? parseTargetReps(pe.sets[0]?.targetReps ?? '')) : parseTargetReps(pe.sets[0]?.targetReps ?? '');
       return {
         exerciseId: pe.exerciseId,
         order: pe.order,
         notes: '',
         sets: pe.sets.map((ps) => ({
           setNumber: ps.setNumber,
-          actualReps: parseTargetReps(ps.targetReps),
+          actualReps: prefillReps,
           actualWeight: prefillWeight,
           unit,
           completed: false,

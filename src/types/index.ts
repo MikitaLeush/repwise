@@ -138,3 +138,16 @@ export interface WorkoutSession {
   completedAt?: string;
   notes?: string;
 }
+
+// ─── Volume Targets ─────────────────────────────────────────────────────────
+export interface MuscleVolumeTarget {
+  muscle: string;
+  targetSets: number;
+}
+
+// ─── Working Weights ─────────────────────────────────────────────────────────
+export interface WorkingWeightEntry {
+  weight: number;
+  unit: WeightUnit;
+}
+export type WorkingWeightMap = Record<string, WorkingWeightEntry>;
