@@ -1,6 +1,8 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { StyleSheet } from 'react-native';
+import { useEffect } from 'react';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
+import { useAuth } from '../../src/context/AuthContext';
 
 function WorkoutIcon({ color }: { color: string }) {
   return (
@@ -38,6 +40,20 @@ function ProfileIcon({ color }: { color: string }) {
 }
 
 export default function TabLayout() {
+  const router = useRouter();
+  const { user, loading, isGuest } = useAuth();
+
+  useEffect(() => {
+    if (loading) return;
+    if (user && !user.emailVerified) {
+      router.replace('/(auth)/verify-email');
+      return;
+    }
+    if (!user && !isGuest) {
+      router.replace('/(auth)/login');
+    }
+  }, [user, loading, isGuest]);
+
   return (
     <Tabs
       initialRouteName="workout"

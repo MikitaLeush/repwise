@@ -1,10 +1,11 @@
 import { useCallback } from 'react';
-import { useAsyncStorage } from './useAsyncStorage';
+import { useFirestoreOrLocal } from './useFirestoreOrLocal';
 import type { WeightUnit, WorkingWeightEntry, WorkingWeightMap } from '../types';
 
 export function useWorkingWeights() {
-  const [weights, setWeights] = useAsyncStorage<WorkingWeightMap>(
+  const [weights, setWeights] = useFirestoreOrLocal<WorkingWeightMap>(
     'repwise_working_weights',
+    'workingWeights',
     {}
   );
 

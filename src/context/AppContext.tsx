@@ -10,6 +10,7 @@ import { useDevSettings } from '../hooks/useDevSettings';
 import { useExerciseFavorites } from '../hooks/useExerciseFavorites';
 import { useVolumeTargets } from '../hooks/useVolumeTargets';
 import { useWorkingWeights } from '../hooks/useWorkingWeights';
+import { useAuth } from './AuthContext';
 
 type AppContextValue = {
   session: ReturnType<typeof useSession>;
@@ -23,6 +24,7 @@ type AppContextValue = {
   exerciseFavorites: ReturnType<typeof useExerciseFavorites>;
   volumeTargets: ReturnType<typeof useVolumeTargets>;
   workingWeights: ReturnType<typeof useWorkingWeights>;
+  auth: ReturnType<typeof useAuth>;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -41,6 +43,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     exerciseFavorites: useExerciseFavorites(),
     volumeTargets: useVolumeTargets(),
     workingWeights: useWorkingWeights(),
+    auth: useAuth(),
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

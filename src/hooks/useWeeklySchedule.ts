@@ -1,11 +1,12 @@
 import { useCallback } from 'react';
-import { useAsyncStorage } from './useAsyncStorage';
+import { useFirestoreOrLocal } from './useFirestoreOrLocal';
 import { defaultSchedule } from '../data/defaultSchedule';
 import type { WeeklySchedule, DayOfWeek } from '../types';
 
 export function useWeeklySchedule() {
-  const [schedule, setSchedule] = useAsyncStorage<WeeklySchedule>(
+  const [schedule, setSchedule] = useFirestoreOrLocal<WeeklySchedule>(
     'repwise_weekly_schedule',
+    'weeklySchedule',
     defaultSchedule
   );
 

@@ -3,6 +3,7 @@ import { Stack, SplashScreen } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppProvider } from '../src/context/AppContext';
+import { AuthProvider } from '../src/context/AuthContext';
 import {
   useFonts,
   JetBrainsMono_400Regular,
@@ -28,9 +29,11 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AppProvider>
-          <Stack screenOptions={{ headerShown: false }} />
-        </AppProvider>
+        <AuthProvider>
+          <AppProvider>
+            <Stack screenOptions={{ headerShown: false }} />
+          </AppProvider>
+        </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

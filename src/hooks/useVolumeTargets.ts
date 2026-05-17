@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useAsyncStorage } from './useAsyncStorage';
+import { useFirestoreOrLocal } from './useFirestoreOrLocal';
 import type { MuscleVolumeTarget } from '../types';
 
 export const VOLUME_MUSCLES = [
@@ -46,8 +46,9 @@ export const LANDMARK_TARGETS: Record<LandmarkMode, Record<string, number>> = {
 };
 
 export function useVolumeTargets() {
-  const [targets, setTargets, loading] = useAsyncStorage<MuscleVolumeTarget[]>(
+  const [targets, setTargets, loading] = useFirestoreOrLocal<MuscleVolumeTarget[]>(
     'repwise_volume_targets',
+    'volumeTargets',
     DEFAULT_VOLUME_TARGETS
   );
 

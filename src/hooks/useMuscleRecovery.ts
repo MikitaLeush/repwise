@@ -1,11 +1,11 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useState, useCallback, useEffect } from 'react';
 import type { ExtendedBodyPart } from 'react-native-body-highlighter';
 import {
   RECOVERY_DURATION_MS,
   percentToStatus,
   percentToColor,
 } from '../data/recovery';
+import { useFirestoreOrLocal } from './useFirestoreOrLocal';
 
 // Only muscular slugs — excludes decorative parts (hair, head, hands, feet, ankles, knees, neck)
 export const ALL_MUSCLE_SLUGS = [
@@ -29,27 +29,16 @@ export const ALL_MUSCLE_SLUGS = [
 
 export type MuscleSlug = (typeof ALL_MUSCLE_SLUGS)[number];
 
-const STORAGE_KEY = '@muscle_recovery_trained_at';
+const DEFAULT_TRAINED_AT: Partial<Record<string, number>> = {};
 
 export function useMuscleRecovery(timeMultiplier: number = 1) {
-  const [trainedAt, setTrainedAt] = useState<Partial<Record<string, number>>>({});
+  const [trainedAt, setTrainedAt] = useFirestoreOrLocal<Partial<Record<string, number>>>(
+    '@muscle_recovery_trained_at',
+    'muscleRecovery',
+    DEFAULT_TRAINED_AT,
+  );
   const [now, setNow] = useState(() => Date.now());
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
-  const loadedRef = useRef(false);
-
-  useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw) as Partial<Record<string, number>>;
-          setTrainedAt(parsed);
-        } catch {
-          // corrupt storage — start fresh
-        }
-      }
-      loadedRef.current = true;
-    });
-  }, []);
 
   // Tick every 10 seconds; when multiplier is high, tick every second
   useEffect(() => {
@@ -75,7 +64,7 @@ export function useMuscleRecovery(timeMultiplier: number = 1) {
 
   const getColor = useCallback(
     (slug: string): string => {
-      if (trainedAt[slug] === undefined) return percentToColor(100); // never trained = fully recovered
+      if (trainedAt[slug] === undefined) return percentToColor(100);
       return percentToColor(getRecoveryPercent(slug));
     },
     [trainedAt, getRecoveryPercent]
@@ -88,27 +77,20 @@ export function useMuscleRecovery(timeMultiplier: number = 1) {
     }));
   }, [getColor]);
 
-  // Tap to select a muscle for status display — does NOT mark as trained
   const selectMuscle = useCallback((slug: string) => {
     setSelectedMuscle(slug);
   }, []);
 
-  // Called only from workout completion flow
   const markAsTrained = useCallback((slug: string) => {
     const ts = Date.now();
     setNow(ts);
-    setTrainedAt((prev) => {
-      const next = { ...prev, [slug]: ts };
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, []);
+    setTrainedAt((prev) => ({ ...prev, [slug]: ts }));
+  }, [setTrainedAt]);
 
   const resetAll = useCallback(() => {
-    setTrainedAt({});
+    setTrainedAt(DEFAULT_TRAINED_AT);
     setSelectedMuscle(null);
-    AsyncStorage.removeItem(STORAGE_KEY);
-  }, []);
+  }, [setTrainedAt]);
 
   return {
     markAsTrained,
@@ -119,6 +101,6 @@ export function useMuscleRecovery(timeMultiplier: number = 1) {
     getRecoveryPercent,
     getAutoStatus,
     resetAll,
-    lastTapped: selectedMuscle, // kept for RecoveryInfo backward compat
+    lastTapped: selectedMuscle,
   };
 }

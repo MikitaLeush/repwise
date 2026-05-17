@@ -51,6 +51,9 @@ yarn-error.*
 Thumbs.db
 Desktop.ini
 
+# ── AI agents / skills (local tooling, not for repo) ──────────────────────────
+.agents/
+
 # ── IDE ────────────────────────────────────────────────────────────────────────
 .vscode/settings.json
 .idea/
@@ -59,6 +62,9 @@ Desktop.ini
 *.njsproj
 *.sln
 uploads/
+docs/
+# ── Dev notes (not for repo) ───────────────────────────────────────────────────
+known-issues.md
 
 # ── TypeScript ─────────────────────────────────────────────────────────────────
 *.tsbuildinfo

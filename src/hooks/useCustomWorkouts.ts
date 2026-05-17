@@ -1,11 +1,12 @@
 import { useCallback } from 'react';
-import { useAsyncStorage } from './useAsyncStorage';
+import { useFirestoreOrLocal } from './useFirestoreOrLocal';
 import { generateId } from '../utils/sessionUtils';
 import type { CustomWorkout, PlannedExercise } from '../types';
 
 export function useCustomWorkouts() {
-  const [workouts, setWorkouts] = useAsyncStorage<CustomWorkout[]>(
+  const [workouts, setWorkouts] = useFirestoreOrLocal<CustomWorkout[]>(
     'repwise_custom_workouts',
+    'customWorkouts',
     []
   );
 

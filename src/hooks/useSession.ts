@@ -1,10 +1,11 @@
 import { useCallback } from 'react';
-import { useAsyncStorage } from './useAsyncStorage';
+import { useFirestoreOrLocal } from './useFirestoreOrLocal';
 import type { WorkoutSession, LoggedSet, LoggedExercise, WeightUnit } from '../types';
 
 export function useSession() {
-  const [sessions, setSessions] = useAsyncStorage<WorkoutSession[]>(
+  const [sessions, setSessions] = useFirestoreOrLocal<WorkoutSession[]>(
     'repwise_sessions',
+    'sessions',
     []
   );
 

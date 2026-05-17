@@ -1,10 +1,10 @@
 import { useCallback } from 'react';
-import { useAsyncStorage } from './useAsyncStorage';
+import { useFirestoreOrLocal } from './useFirestoreOrLocal';
 import { generateId } from '../utils/sessionUtils';
 import type { BodyweightLog } from '../types';
 
 export function useBodyweightLog() {
-  const [logs, setLogs] = useAsyncStorage<BodyweightLog[]>('repwise_bodyweight_logs', []);
+  const [logs, setLogs] = useFirestoreOrLocal<BodyweightLog[]>('repwise_bodyweight_logs', 'bodyweightLogs', []);
 
   const addLog = useCallback(
     (weightKg: number, date: string) => {

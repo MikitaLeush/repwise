@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useAsyncStorage } from './useAsyncStorage';
+import { useFirestoreOrLocal } from './useFirestoreOrLocal';
 
 interface FavoritesData {
   favorites: string[];
@@ -9,7 +9,7 @@ interface FavoritesData {
 const DEFAULT: FavoritesData = { favorites: [], hidden: [] };
 
 export function useExerciseFavorites() {
-  const [data, setData] = useAsyncStorage<FavoritesData>('repwise_exercise_favorites', DEFAULT);
+  const [data, setData] = useFirestoreOrLocal<FavoritesData>('repwise_exercise_favorites', 'favorites', DEFAULT);
 
   const toggleFavorite = useCallback(
     (id: string) => {

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -46,6 +47,8 @@ const RPE_ROWS = [
 
 export default function ProfileTab() {
   const { unit, devSettings, volumeTargets, customWorkouts, recovery } = useApp();
+  const router = useRouter();
+  const { auth: { user, isGuest, logout } } = useApp();
   const [landmark, setLandmark] = useState<LandmarkMode>('MAV');
   const [editingWorkout, setEditingWorkout] = useState<CustomWorkout | null>(null);
 
@@ -251,6 +254,36 @@ export default function ProfileTab() {
           <Text style={styles.wipeNote}>Permanently deletes all sessions and logs.</Text>
         </View>
 
+        {/* Auth section */}
+        <View style={styles.authSection}>
+          {user ? (
+            <>
+              <Text style={styles.authEmail}>{user.email}</Text>
+              <TouchableOpacity
+                style={styles.logoutBtn}
+                onPress={async () => {
+                  await logout();
+                  router.replace('/(auth)/login');
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.logoutBtnText}>Sign Out</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.guestLabel}>Signed in as guest — data stored locally only</Text>
+              <TouchableOpacity
+                style={styles.signInBtn}
+                onPress={() => router.push('/(auth)/login')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.signInBtnText}>Sign In / Create Account</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
         <View style={{ height: 32 }} />
       </ScrollView>
       <EditWorkoutSheet
@@ -372,4 +405,40 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: BORDER,
   },
   manageEditText: { color: ACCENT, fontSize: 13, fontWeight: '600' },
+
+  // Auth section
+  authSection: {
+    marginTop: 16,
+    marginBottom: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#1f2825',
+    paddingTop: 20,
+    gap: 12,
+    alignItems: 'center',
+  },
+  authEmail: { color: '#5A6663', fontFamily: MONO, fontSize: 12 },
+  logoutBtn: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#FF6B6B',
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  logoutBtnText: { color: '#FF6B6B', fontFamily: MONO_BOLD, fontSize: 14 },
+  guestLabel: {
+    color: '#5A6663',
+    fontFamily: MONO,
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  signInBtn: {
+    width: '100%',
+    backgroundColor: '#5BD1A0',
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  signInBtnText: { color: '#0B1A14', fontFamily: MONO_BOLD, fontSize: 14 },
 });
